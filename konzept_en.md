@@ -6,10 +6,15 @@ A custom component for Home Assistant covering the following core areas:
 
 - **Timer / Scheduler**: Control entities (switches, lights, etc.) on a schedule
 - **Reminder / Calendar**: Reminders, appointments, anniversaries, to-dos
-- **Telegram Integration**: Notifications and bot control
+- **Telegram Integration**: Notifications and bidirectional bot control (interactive when HA Telegram Bot is present)
 - **Bidirectional Calendar Integration**: Full synchronisation with Microsoft 365/Outlook, Google Calendar and Apple iCloud Calendar – for multiple persons/accounts simultaneously
 - **Persistence**: All data survives HA restarts
 - **User-Friendliness**: Full configuration via the HA UI (Config Flow + Options Flow)
+- **Multi-instance**: Multiple independent instances supported in parallel (e.g. "Garden", "House")
+- **Own Dashboard + Lovelace Cards**: A bundled dashboard and standalone cards for custom dashboards
+- **HACS-compliant**: HACS-compatible from the start, easy installation and updates
+
+**Minimum requirement**: Home Assistant 2026.0+
 
 ---
 
@@ -19,13 +24,13 @@ A custom component for Home Assistant covering the following core areas:
 
 ```
 custom_components/advanced_timer_calendar/
-├── __init__.py              # Setup, Coordinator startup
-├── manifest.json            # Metadata, dependencies
-├── config_flow.py           # Setup wizard (UI)
+├── __init__.py              # Setup, Coordinator startup, multi-instance support
+├── manifest.json            # Metadata, dependencies (HACS-compliant)
+├── config_flow.py           # Setup wizard (UI), multi-instance
 ├── options_flow.py          # Post-setup settings
-├── const.py                 # Constants, enums
+├── const.py                 # Constants, enums, DOMAIN
 ├── coordinator.py           # Central DataUpdateCoordinator
-├── storage.py               # Persistence via HA Storage API
+├── storage.py               # Persistence via HA Storage API (with migration engine)
 ├── scheduler.py             # Timer logic & scheduling engine
 ├── calendar.py              # Calendar platform (CalendarEntity)
 ├── sensor.py                # Sensor platform (status, next trigger)
@@ -33,6 +38,7 @@ custom_components/advanced_timer_calendar/
 ├── services.yaml            # HA service definitions
 ├── services.py              # Service handlers
 ├── telegram_bot.py          # Telegram notification & control module
+│                            # (interactive/bidirectional via HA telegram_bot)
 ├── external_calendars/
 │   ├── __init__.py          # Package init, provider registry
 │   ├── base.py              # Abstract base class CalendarProvider
@@ -45,7 +51,15 @@ custom_components/advanced_timer_calendar/
 ├── translations/
 │   ├── de.json
 │   └── en.json
-└── strings.json
+├── strings.json
+└── www/                     # Lovelace Custom Cards (HACS frontend)
+    ├── atc-timer-card.js    # Timer overview card
+    ├── atc-reminder-card.js # Calendar/reminder card
+    └── atc-status-card.js   # System status card
+
+hacs.json                    # HACS manifest (repo root)
+dashboard/
+└── atc_dashboard.yaml       # Bundled default dashboard
 ```
 
 ### 2.2 Data Storage
@@ -57,6 +71,7 @@ Data structure (simplified):
 ```json
 {
   "version": 1,
+  "schema_version": 1,
   "timers": [ { "...Timer object..." } ],
   "reminders": [ { "...Reminder object..." } ],
   "calendar_accounts": [
@@ -79,6 +94,31 @@ Data structure (simplified):
   "calendar_triggers": [ { "...Trigger object..." } ],
   "settings": { "...global settings..." }
 }
+```
+
+### 2.3 Storage Schema Migration
+
+The storage file contains the field `schema_version`. On every startup the integration compares the stored version against the current version constant:
+
+```python
+STORAGE_VERSION = 1  # In const.py – increment on breaking changes
+```
+
+**Migration engine** (`storage.py`):
+- On load: read `schema_version` from file
+- If `schema_version < STORAGE_VERSION`: apply migration functions sequentially
+- Each migration is a dedicated function (`migrate_v1_to_v2`, `migrate_v2_to_v3`, …)
+- After successful migration: write data back with the new `schema_version`
+- On error: create backup of the old file at `.storage/advanced_timer_calendar.bak`, log error
+
+**Example migration (v1 → v2)**:
+```python
+def migrate_v1_to_v2(data: dict) -> dict:
+    # Example: add new required field 'tags' to all timers
+    for timer in data.get("timers", []):
+        timer.setdefault("tags", [])
+    data["schema_version"] = 2
+    return data
 ```
 
 ---
@@ -191,9 +231,12 @@ Optional integration with HA's native `todo` platform (from HA 2023.11) for nati
 
 ### 5.1 Operating Modes
 
-**Mode A – Standalone** (simple): Enter Bot Token + Chat ID directly in the Config Flow → the integration sends messages itself via the Telegram Bot API.
+**Mode A – Standalone** (simple): Enter Bot Token + Chat ID directly in the Config Flow → the integration sends messages itself via the Telegram Bot API. Outbound notifications only, no inbound commands.
 
-**Mode B – HA Telegram Bot** (advanced): Use the existing `telegram_bot` integration in HA as a notification service.
+**Mode B – HA Telegram Bot** (advanced, recommended): Use the existing `telegram_bot` integration in HA. When present, **bidirectional and interactive** communication is enabled:
+- Outbound: messages and inline keyboards via `notify.<telegram_service>`
+- Inbound: commands and callback responses via HA events (`telegram_command`, `telegram_callback`)
+- Interactive inline keyboards for confirmations, selections, and status queries
 
 ### 5.2 Notifications
 
@@ -212,9 +255,9 @@ Message format configurable (template-based), e.g.:
 Duration: 10 minutes | Next run: Tomorrow 06:00
 ```
 
-### 5.3 Bot Control (Mode B)
+### 5.3 Bot Control (Mode B – HA Telegram Bot)
 
-Control timers via Telegram commands:
+Control timers via Telegram commands (only when `telegram_bot` integration is present):
 
 | Command | Function |
 |---------|---------|
@@ -225,6 +268,22 @@ Control timers via Telegram commands:
 | `/reminder list` | Upcoming reminders |
 | `/reminder add ...` | Quick-create reminder |
 | `/status` | System overview |
+
+**Inline keyboards (interactive, Mode B)**:
+
+When a timer trigger or reminder fires, inline keyboard buttons are included in the message:
+
+```
+🌿 Irrigation Zone 1 starts in 5 minutes
+[✅ Confirm] [⏭ Skip] [⏸ Pause (1h)]
+```
+
+```
+🔔 Reminder: Doctor's appointment in 30 minutes
+[✅ OK] [⏰ Remind in +15 min] [❌ Cancel]
+```
+
+Callback responses are processed via HA events (`telegram_callback`) and trigger the corresponding ATC services.
 
 Security: Whitelist of chat IDs allowed to send commands.
 
@@ -303,27 +362,75 @@ All settings can be changed afterwards.
 - Entities appear in the HA dashboard
 - Calendar in the HA Calendar dashboard
 
-### 9.2 Lovelace Cards (Phase 2, optional)
-For maximum user-friendliness, custom cards could be developed:
+### 9.2 Own ATC Dashboard (Phase 1)
 
-- **ATC Timer Card**: Overview of all timers, quick on/off, next run
-- **ATC Reminder Card**: Calendar view of upcoming appointments
-- **ATC Quick Reminder Card**: Quickly create reminders
+A pre-configured dashboard (`dashboard/atc_dashboard.yaml`) is bundled with the integration and automatically registered in HA during initial setup. The dashboard exclusively uses ATC Lovelace Cards (see 9.3) and provides an immediate, complete overview:
+
+- **Tab 1 – Timers**: All timers with status, next run time, on/off switches
+- **Tab 2 – Calendar & Reminders**: Monthly view, upcoming appointments, to-do list
+- **Tab 3 – External Calendars**: Sync status for all accounts, upcoming events
+- **Tab 4 – Settings**: Quick access to Options Flow, notification test
+
+The dashboard can be disabled or customised at any time. Recreating it is possible via a service call.
+
+### 9.3 Lovelace Custom Cards (Phase 1)
+
+All cards are delivered as standalone JavaScript modules (`www/`) and registered automatically via HACS. They can be used both in the ATC dashboard and in any user-defined dashboard:
+
+#### ATC Timer Card (`atc-timer-card`)
+```yaml
+type: custom:atc-timer-card
+instance: garden        # Optional: ATC instance name (for multiple instances)
+show_disabled: false    # Hide disabled timers
+```
+- Overview of all timers for the instance
+- Inline on/off toggle per timer
+- Next run as countdown
+- Status display: `idle`, `running`, `paused`, `skipped`
+- Quick actions: Run now, Skip, Pause
+
+#### ATC Reminder Card (`atc-reminder-card`)
+```yaml
+type: custom:atc-reminder-card
+instance: garden
+days_ahead: 7           # Days ahead to display
+show_completed: false
+```
+- List view of upcoming reminders and appointments
+- Colour-coded by type (appointment, anniversary, to-do)
+- Inline completion of to-dos
+
+#### ATC Status Card (`atc-status-card`)
+```yaml
+type: custom:atc-status-card
+instance: garden
+```
+- System overview: active timers, upcoming reminders, sync status
+- Telegram connection status
+- Last / next actions
 
 ---
 
-## 10. Technical Decisions & Open Questions
+## 10. Technical Decisions
 
-### Open Questions / Decision Required
+### Resolved Decisions (all open questions answered)
 
-1. **Minimum HA version**: Which HA version should be the minimum? Recommendation: 2023.9+ (stable Calendar & ToDo API)
-2. **Multiple instances**: Should the integration be installable multiple times (e.g. "Garden", "House")? Or one central instance with groups/tags?
-3. **Dependencies**: Use `croniter` (PyPI) for cron expressions and `python-telegram-bot` for standalone mode – or use only HA-internal tools?
-4. **Migration strategy**: How should Storage schema migration work on updates (versioning in the storage file)?
-5. **Telegram Bot Commands**: Should the bot be interactive (inline keyboards for confirmations) or just simple text commands?
-6. **Irrigation sensor logic**: Should there be a dedicated "irrigation profile" feature, or is the generic condition logic sufficient?
-7. **Lovelace Cards**: Include in Phase 1 or defer to Phase 2? Significantly increases complexity.
-8. **HACS compatibility**: Develop HACS-compliant from the start (recommended) – requires a specific `hacs.json` file.
+| Topic | Decision |
+|-------|----------|
+| **Minimum HA version** | HA 2026.0+ (stable Calendar, ToDo & Event API) |
+| **Multiple instances** | ✅ Yes – via `config_entries`, unlimited instances (e.g. "Garden", "House") |
+| **Dependencies** | HA-internal tools only, or libraries bundled with the integration (no separate PyPI installations required) |
+| **Storage migration** | Versioned schema (`schema_version`), sequential migration functions in `storage.py` (see section 2.3) |
+| **Telegram mode** | Mode A (standalone, outbound only) + Mode B (interactive & bidirectional when HA `telegram_bot` is present) |
+| **Telegram bot commands** | Interactive inline keyboards for confirmations and selections in Mode B |
+| **Irrigation logic** | Generic condition logic only (no dedicated irrigation engine) – extensible in later phases |
+| **Lovelace cards** | ✅ Phase 1 – bundled as standalone custom cards (`www/`) + own dashboard |
+| **HACS compatibility** | ✅ From the start – `hacs.json` in repo root, HACS-compliant directory structure |
+| **UI languages** | German and English from the start (`translations/de.json` + `en.json`) |
+| **Cron expressions** | Optional `cron` schedule type for advanced users (via bundled `croniter` library) |
+| **OAuth2 app registration** | User registers their own app (Client ID/Secret entered in Config Flow) |
+| **Token security** | AES-256 encryption via HA `secrets` / `keyring`, no plain text in storage |
+| **Sync conflict resolution** | Configurable per account: `ha_wins`, `remote_wins`, `newest_wins`, `manual` |
 
 ### Recommended Design Decisions
 
@@ -331,6 +438,7 @@ For maximum user-friendliness, custom cards could be developed:
 - **DataUpdateCoordinator**: Central state management, all platforms subscribe to it
 - **Native asyncio**: No blocking calls, everything async
 - **HACS from the start**: Enables easy distribution and updates for non-technical users
+- **config_entries**: Multi-instance support via HA standard mechanism
 
 ---
 
@@ -367,21 +475,26 @@ Export and import timers and reminders as YAML/JSON – useful for backups and s
 ## 12. Phase Plan (Implementation Recommendation)
 
 ### Phase 1 – Core (MVP)
-- Persistence & storage
+- HACS compliance (`hacs.json`, HACS-compliant structure)
+- Persistence & storage (including migration engine)
+- Multi-instance support via `config_entries`
 - Scheduler engine (`daily`, `weekdays`, `interval`, `yearly`, `once`)
 - Actions (`turn_on`, `turn_off`, duration)
-- Conditions (entity state, template)
+- Conditions (entity state, template) – generic condition logic
 - HA entities (switch, sensor)
 - Config Flow (without Telegram, without external calendars)
 - Calendar platform
 - Services
+- **Lovelace Custom Cards** (`atc-timer-card`, `atc-reminder-card`, `atc-status-card`)
+- **ATC Dashboard** (automatically installed default dashboard)
 
 ### Phase 2 – Telegram & Reminder
-- Telegram Mode A (standalone)
-- Telegram Mode B (HA integration)
+- Telegram Mode A (standalone, outbound only)
+- Telegram Mode B (HA integration, bidirectional & interactive via inline keyboards)
 - Reminder/calendar types (anniversaries, to-dos)
 - HA To-Do platform integration
 - Sunrise/sunset trigger
+- Cron schedule type (for advanced users)
 
 ### Phase 3 – External Calendar Integration
 - Google Calendar: OAuth2, bidirectional sync, calendar triggers
@@ -393,30 +506,71 @@ Export and import timers and reminders as YAML/JSON – useful for backups and s
 - Outbound sync: HA timers and reminders written to external calendars
 
 ### Phase 4 – Convenience & Extensions
-- Lovelace cards
-- Smart watering algorithm
+- Smart watering algorithm (irrigation profile as extension of generic condition logic)
 - Timer templates
 - Import/export
-- Bot inline keyboards
-- Statistics
+- Notification escalation
+- Statistics & history
 - Further Office integrations (Microsoft Teams presence, To Do, etc.)
 
 ---
 
-## 13. Open Points for Clarification
+## 13. HACS Configuration
 
-Before starting implementation, please decide on the following:
+### 13.1 hacs.json (Repo Root)
 
-1. **Which minimum HA version** should be supported?
-2. **Should external Python libraries** (`croniter`, `python-telegram-bot`) be used, or should the integration avoid external dependencies?
-3. **Cron expressions** desired for advanced users, or are the defined schedule types sufficient?
-4. **Multi-instance support** (`config_entries`) from the start, or single instance?
-5. **Confirm Phase 1 scope**: Is the MVP sensibly scoped, or should certain features be moved forward/back?
-6. **Telegram priority**: Should Telegram already be included in Phase 1 (as it is a core requirement)?
-7. **UI text language**: German and English from the start (`translations/de.json` + `en.json`)?
-8. **Calendar accounts**: Should OAuth2 app registration (Client ID/Secret) be done by the user (self-registered app) or should a shared/central app registration be used?
-9. **Token security**: Should OAuth2 tokens be stored encrypted in HA Storage API (recommended with `HA secrets` / `keyring`)?
-10. **Conflict resolution on sync**: Which strategy should apply when there are simultaneous changes (HA wins, remote wins, newest timestamp wins)?
+```json
+{
+  "name": "HA Advanced Timer & Calendar",
+  "content_in_root": false,
+  "render_readme": true,
+  "homeassistant": "2026.0.0",
+  "frontend_javascript_modules": [
+    "www/atc-timer-card.js",
+    "www/atc-reminder-card.js",
+    "www/atc-status-card.js"
+  ]
+}
+```
+
+### 13.2 manifest.json (custom_components/advanced_timer_calendar/)
+
+```json
+{
+  "domain": "advanced_timer_calendar",
+  "name": "Advanced Timer & Calendar",
+  "version": "1.0.0",
+  "documentation": "https://github.com/northpower25/HA-Advanced-Timer-and-Calendar",
+  "issue_tracker": "https://github.com/northpower25/HA-Advanced-Timer-and-Calendar/issues",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@northpower25"],
+  "config_flow": true,
+  "iot_class": "local_push",
+  "homeassistant": "2026.0.0"
+}
+```
+
+> **Note on dependencies**: Only HA-internal tools and libraries bundled with the integration are used. No external PyPI packages that need to be installed separately.
+
+### 13.3 Directory Structure (HACS-compliant)
+
+```
+HA-Advanced-Timer-and-Calendar/          ← GitHub Repo Root
+├── hacs.json                            ← HACS manifest
+├── README.md
+├── custom_components/
+│   └── advanced_timer_calendar/         ← HA Custom Component
+│       ├── manifest.json
+│       ├── __init__.py
+│       └── ...
+├── www/                                 ← Lovelace Custom Cards
+│   ├── atc-timer-card.js
+│   ├── atc-reminder-card.js
+│   └── atc-status-card.js
+└── dashboard/
+    └── atc_dashboard.yaml               ← Default dashboard
+```
 
 ---
 
