@@ -417,6 +417,11 @@ Before starting implementation, please decide on the following:
 8. **Calendar accounts**: Should OAuth2 app registration (Client ID/Secret) be done by the user (self-registered app) or should a shared/central app registration be used?
 9. **Token security**: Should OAuth2 tokens be stored encrypted in HA Storage API (recommended with `HA secrets` / `keyring`)?
 10. **Conflict resolution on sync**: Which strategy should apply when there are simultaneous changes (HA wins, remote wins, newest timestamp wins)?
+11. **OAuth2 registration strategy**: Should a central app registration be provided by the integration maintainer (recommended for personal users, since personal Microsoft accounts have no access to the Azure Portal), or should each user register their own app in the Azure Portal / Google Cloud Console? A central registration greatly simplifies setup for personal accounts, but may require app verification by Microsoft/Google and ongoing maintenance of the app registration.
+12. **Detect Microsoft account type in setup**: Should the Config Flow explicitly distinguish between "Personal (outlook.com / hotmail.com)" and "Business (Microsoft 365 / Azure AD)" to automatically indicate available features and hide unavailable ones (e.g. Teams presence, Planner)?
+13. **Handling of Business-only features in the UI**: Should features like Teams presence and Planner be visible in the Config Flow for all users (with a note "Only for Business accounts"), or should they be completely hidden when a personal account is detected?
+14. **Google Cloud project guide for personal users**: Should a step-by-step guide for creating a Google Cloud application and OAuth Client ID be included in the documentation? This is mandatory for personal Gmail users without a central OAuth registration.
+15. **Google app verification**: Google requires app verification (security assessment, privacy policy, domain verification) for sensitive scopes (Google Calendar) and restricted scopes (Gmail). Should a fully verified central app be pursued, or will only the use of individual (unverified) Client IDs be supported initially? With unverified apps, users see a Google security warning at login.
 
 ---
 
@@ -424,12 +429,14 @@ Before starting implementation, please decide on the following:
 
 ### 14.1 Overview & Supported Providers
 
-| Provider | Protocol / API | Authentication |
-|----------|---------------|----------------|
-| Microsoft 365 / Outlook | Microsoft Graph API (REST) | OAuth2 – Device Code Flow or Authorization Code Flow with PKCE |
-| Google Calendar | Google Calendar API v3 (REST) | OAuth2 – Authorization Code Flow with PKCE |
-| Apple iCloud Calendar | CalDAV (RFC 4791) | App-specific password (Apple ID + iCloud password alternative) |
-| Exchange Server (On-Premise) | EWS (Exchange Web Services) or CalDAV | NTLM / Basic Auth / Modern Auth |
+> **Note on account types**: This integration is primarily designed for **private accounts**. Features that are only available with Microsoft 365 Business/Work accounts (Azure AD) or Google Workspace are marked with 🏢 throughout sections 14 and 15. Features available to all account types are marked ✅. Features requiring additional setup are marked ⚠️.
+
+| Provider | Protocol / API | Authentication | Account Types |
+|----------|---------------|----------------|---------------|
+| Microsoft 365 / Outlook | Microsoft Graph API (REST) | OAuth2 – Device Code Flow or Authorization Code Flow with PKCE | ✅ Personal (outlook.com) & 🏢 Business (M365) |
+| Google Calendar | Google Calendar API v3 (REST) | OAuth2 – Authorization Code Flow with PKCE | ✅ Personal (gmail.com) & 🏢 Business (Workspace) |
+| Apple iCloud Calendar | CalDAV (RFC 4791) | App-specific password (Apple ID + iCloud password alternative) | ✅ Personal & Business |
+| Exchange Server (On-Premise) | EWS (Exchange Web Services) or CalDAV | NTLM / Basic Auth / Modern Auth | 🏢 Business only |
 
 Multiple accounts of the same or different providers are fully supported. Each account is independently configurable.
 
@@ -602,6 +609,8 @@ Also at end: Yes → Turn off all devices
 4. Calendar list is loaded → user selects calendars
 5. Per calendar: sync direction (Bidirectional / Inbound only / Outbound only)
 
+> ⚠️ **Note for personal account users (outlook.com / hotmail.com / live.com)**: Personal Microsoft accounts do not have access to the Azure Portal. Self-registering an OAuth app is therefore not possible without an Azure subscription. A central app registration by the integration maintainer is required, with "Personal Microsoft Accounts" explicitly enabled (→ Open Question 11). Features such as Teams presence and Planner are **not available** for personal accounts (→ Sections 15.1, 15.2).
+
 ── Google Calendar ────────────────────────────────────────────
 2. Enter display name
 3. OAuth2 Authorization URL is generated:
@@ -609,6 +618,8 @@ Also at end: Yes → Turn off all devices
    → User opens URL in browser → signs in to Google → grants permissions
    → After redirect: token automatically saved
 4. Calendar list → select → sync direction
+
+> ⚠️ **Note for personal account users (gmail.com)**: OAuth2 authentication requires a Client ID/Secret. Personal users must either create their own Google Cloud project and register an OAuth app (free but involved), or a central app registration provided by the maintainer can be used (→ Open Questions 11, 15). Unverified apps display a Google security warning at login.
 
 ── Apple iCloud ───────────────────────────────────────────────
 2. Enter display name
@@ -627,11 +638,39 @@ Also at end: Yes → Turn off all devices
 | HA native CalDAV | Read-only, no write support, no triggers |
 | ATC (this concept) | Fully bidirectional, keyword triggers, multi-account, deeply integrated with timers/reminders |
 
+### 14.10 Account Type Compatibility
+
+The following table provides an overview of which features are available with which account type. **Personal accounts** (outlook.com, gmail.com, apple.com) are the primary target audience for this integration.
+
+| Feature | Personal (Outlook.com) | Personal (Gmail) | 🏢 Business (M365) | 🏢 Business (Workspace) |
+|---------|------------------------|------------------|--------------------|-------------------------|
+| **Bidirectional calendar sync** | ✅ | ✅ | ✅ | ✅ |
+| **Calendar triggers (keyword)** | ✅ | ✅ | ✅ | ✅ |
+| **Graph/Push webhooks** | ✅ (max. 3 days) | ✅ (max. 7 days) | ✅ | ✅ |
+| **Microsoft To Do sync** | ✅ | – | ✅ | – |
+| **Google Tasks sync** | – | ✅ | – | ✅ |
+| **Outlook email trigger** | ✅ | – | ✅ | – |
+| **Gmail email trigger** | – | ⚠️ (*) | – | ✅ |
+| **Send email (service)** | ✅ | ⚠️ (*) | ✅ | ✅ |
+| **OneDrive backup** | ✅ (5 GB free) | – | ✅ (1 TB+) | – |
+| **Teams presence** | ❌ | – | ✅ | – |
+| **Microsoft Planner** | ❌ | – | ✅ | – |
+| **SharePoint file trigger** | ❌ | – | ✅ | – |
+| **Google Meet presence** | – | ✅ (**) | – | ✅ (**) |
+| **Apple Calendar (CalDAV)** | ✅ | – | ✅ | – |
+| **Apple Reminders (VTODO)** | ⚠️ (***) | – | ⚠️ (***) | – |
+
+(*) Requires a Google Cloud project + Pub/Sub setup; for restricted scopes (Gmail) a Google app verification may be required for a central app registration.  
+(**) No direct Google Meet API endpoint exists; meeting status is derived indirectly from Calendar events containing a Meet link – works equally for all account types.  
+(***) Apple only partially supports VTODO via CalDAV; functionality may vary depending on the iCloud version.
+
 ---
 
 ## 15. Further Microsoft Office / Productivity Integrations
 
-### 15.1 Microsoft Teams – Presence & Meeting Control
+### 15.1 Microsoft Teams – Presence & Meeting Control 🏢 *(Microsoft 365 Business/Work account only)*
+
+> ⚠️ **Account restriction**: The Graph Presence API (`/me/presence`) is exclusively available for Microsoft 365 Business/Work accounts (Azure AD / Entra ID). Personal Microsoft accounts (outlook.com, hotmail.com, live.com) have **no access** to this API. Microsoft Teams Consumer (personal version) does not support the Presence API. This feature is therefore only usable by users with a corporate account.
 
 **Scenario**: When the user is in a Teams meeting → dim office light, turn on "Do Not Disturb" LED, silence doorbell notifications.
 
@@ -657,15 +696,17 @@ Meeting ends (Available):
 
 ### 15.2 Microsoft To Do / Planner
 
-**Microsoft To Do**:
+**Microsoft To Do** ✅ *(Personal & Business)*:
 - REST API: read/write task lists (`/me/todo/lists/{listId}/tasks`)
 - Bidirectional sync with HA ToDo platform
 - Due tasks as HA reminders → notification via Telegram
 - Create new tasks from HA (via HA dashboard or service)
 
-**Microsoft Planner** (team tasks):
+**Microsoft Planner** (team tasks) 🏢 *(Business only)*:
 - Task status as HA sensor (e.g. project progress)
 - Create new tasks on HA events (e.g. "Replace filter" when air quality sensor exceeds threshold)
+
+> ⚠️ **Account restriction (Planner)**: Microsoft Planner is exclusively available with Microsoft 365 Business/Work accounts (Azure AD) and is not accessible to personal Outlook.com accounts.
 
 ### 15.3 Microsoft Outlook – Email Triggers
 
@@ -681,6 +722,8 @@ Meeting ends (Available):
 
 ### 15.4 Microsoft OneDrive / SharePoint
 
+**OneDrive Personal** ✅ *(Personal & Business)*:
+
 **Scenarios**:
 - Automatic backup of HA configuration to OneDrive (daily/weekly)
 - Export of timer/reminder data to OneDrive
@@ -691,19 +734,29 @@ Meeting ends (Available):
 - Service `atc.backup_to_onedrive`: manual or automatic backup
 - Webhook on OneDrive folder for file triggers
 
+> ℹ️ **Note**: Personal accounts include 5 GB of free OneDrive storage. This is sufficient for configuration backups.
+
+**SharePoint** 🏢 *(Business only)*:
+- SharePoint file triggers and folder webhooks are exclusively available with Microsoft 365 Business/Work accounts.
+- Personal Microsoft accounts do not have access to SharePoint resources.
+
 ### 15.5 Google Workspace – Extensions
 
-**Google Tasks**:
+**Google Tasks** ✅ *(Personal & Business)*:
 - Bidirectional sync with HA ToDo platform (analogous to Microsoft To Do)
 - Tasks as HA reminders, completion from HA
 
-**Google Meet – Presence** (via Google Calendar):
+**Google Meet – Presence** ✅ *(Personal & Business, indirect via Google Calendar)*:
 - Derive meeting status from active Google Calendar events
 - `binary_sensor.atc_google_in_meeting_<name>` when event with Meet link is active
 
-**Google Gmail – Email Triggers**:
+> ℹ️ **Note**: There is no direct Google Meet Presence API endpoint (for neither personal nor business accounts). Meeting status is derived solely from active Google Calendar events containing a Meet link – this works identically for all account types and is not a limitation compared to business accounts.
+
+**Google Gmail – Email Triggers** ⚠️ *(Restricted for personal users)*:
 - Gmail API (Pub/Sub Push) for email triggers
 - Service `atc.send_gmail`: send email via Gmail API
+
+> ⚠️ **Note for personal users**: The Gmail API requires a Google Cloud project with Pub/Sub enabled. Gmail scopes are classified by Google as "restricted" and require a thorough app verification process for a central app registration (security assessment, privacy policy, domain verification). For personal users with their own Client ID, usage is possible but will display a Google security warning at login (→ Open Question 15).
 
 ### 15.6 Apple Extensions
 
@@ -716,17 +769,20 @@ Meeting ends (Available):
 
 ### 15.7 Overview: Integration Roadmap
 
-| Feature | Provider | Priority | Complexity | Phase |
-|---------|----------|----------|------------|-------|
-| Bidirectional calendar sync | Microsoft / Google / Apple | ⭐⭐⭐⭐⭐ | High | 3 |
-| Calendar trigger (keyword) | Microsoft / Google / Apple | ⭐⭐⭐⭐⭐ | Medium | 3 |
-| Teams presence sensor | Microsoft | ⭐⭐⭐⭐ | Medium | 4 |
-| To Do / Tasks sync | Microsoft / Google | ⭐⭐⭐⭐ | Medium | 4 |
-| Email trigger (inbox) | Microsoft / Google | ⭐⭐⭐ | Medium | 4 |
-| Send email (service) | Microsoft / Google | ⭐⭐⭐ | Low | 4 |
-| OneDrive backup | Microsoft | ⭐⭐⭐ | Low | 4 |
-| Planner tasks | Microsoft | ⭐⭐ | Medium | 5 |
-| SharePoint file trigger | Microsoft | ⭐⭐ | High | 5 |
-| iCloud Drive | Apple | ⭐ | Very high | – |
+| Feature | Provider | Priority | Complexity | Phase | Account Type |
+|---------|----------|----------|------------|-------|--------------|
+| Bidirectional calendar sync | Microsoft / Google / Apple | ⭐⭐⭐⭐⭐ | High | 3 | ✅ All |
+| Calendar trigger (keyword) | Microsoft / Google / Apple | ⭐⭐⭐⭐⭐ | Medium | 3 | ✅ All |
+| Teams presence sensor | Microsoft | ⭐⭐⭐⭐ | Medium | 4 | 🏢 Business only |
+| To Do sync | Microsoft | ⭐⭐⭐⭐ | Medium | 4 | ✅ Personal & Business |
+| Tasks sync | Google | ⭐⭐⭐⭐ | Medium | 4 | ✅ Personal & Business |
+| Email trigger (inbox) | Microsoft / Google | ⭐⭐⭐ | Medium | 4 | ✅ / ⚠️ (*) |
+| Send email (service) | Microsoft / Google | ⭐⭐⭐ | Low | 4 | ✅ / ⚠️ (*) |
+| OneDrive backup | Microsoft | ⭐⭐⭐ | Low | 4 | ✅ Personal (5 GB) & Business |
+| Planner tasks | Microsoft | ⭐⭐ | Medium | 5 | 🏢 Business only |
+| SharePoint file trigger | Microsoft | ⭐⭐ | High | 5 | 🏢 Business only |
+| iCloud Drive | Apple | ⭐ | Very high | – | – (no official API) |
+
+(*) Microsoft Outlook: ✅ Personal & Business. Google Gmail: ⚠️ Requires Google Cloud project + Pub/Sub; for a central app registration a Google app verification may be required.
 
 ---
