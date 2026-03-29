@@ -7,6 +7,7 @@ A custom component for Home Assistant covering the following core areas:
 - **Timer / Scheduler**: Control entities (switches, lights, etc.) on a schedule
 - **Reminder / Calendar**: Reminders, appointments, anniversaries, to-dos
 - **Telegram Integration**: Notifications and bot control
+- **Bidirectional Calendar Integration**: Full synchronisation with Microsoft 365/Outlook, Google Calendar and Apple iCloud Calendar – for multiple persons/accounts simultaneously
 - **Persistence**: All data survives HA restarts
 - **User-Friendliness**: Full configuration via the HA UI (Config Flow + Options Flow)
 
@@ -32,6 +33,15 @@ custom_components/advanced_timer_calendar/
 ├── services.yaml            # HA service definitions
 ├── services.py              # Service handlers
 ├── telegram_bot.py          # Telegram notification & control module
+├── external_calendars/
+│   ├── __init__.py          # Package init, provider registry
+│   ├── base.py              # Abstract base class CalendarProvider
+│   ├── microsoft.py         # Microsoft 365 / Outlook (Graph API)
+│   ├── google.py            # Google Calendar API
+│   ├── apple.py             # Apple iCloud Calendar (CalDAV)
+│   ├── sync_engine.py       # Bidirectional sync logic & conflict resolution
+│   ├── trigger_processor.py # Event-based HA trigger evaluation
+│   └── oauth_handler.py     # OAuth2 flows (PKCE, Device Code)
 ├── translations/
 │   ├── de.json
 │   └── en.json
@@ -49,6 +59,24 @@ Data structure (simplified):
   "version": 1,
   "timers": [ { "...Timer object..." } ],
   "reminders": [ { "...Reminder object..." } ],
+  "calendar_accounts": [
+    {
+      "id": "uuid",
+      "provider": "microsoft|google|apple",
+      "display_name": "John Doe – Work",
+      "credentials": { "...OAuth token (encrypted)..." },
+      "calendars": [
+        {
+          "remote_id": "...",
+          "name": "Calendar name",
+          "sync_enabled": true,
+          "sync_direction": "bidirectional|inbound|outbound",
+          "color": "#0078d4"
+        }
+      ]
+    }
+  ],
+  "calendar_triggers": [ { "...Trigger object..." } ],
   "settings": { "...global settings..." }
 }
 ```
@@ -228,6 +256,13 @@ Security: Whitelist of chat IDs allowed to send commands.
 | `atc.run_now` | timer_id | Run immediately |
 | `atc.create_reminder` | title, date, ... | Create reminder |
 | `atc.complete_todo` | reminder_id | Mark to-do as completed |
+| `atc.sync_calendar` | account_id | Trigger manual sync for account |
+| `atc.add_calendar_account` | provider, display_name | Add a new calendar account |
+| `atc.remove_calendar_account` | account_id | Remove account (including data) |
+| `atc.create_external_event` | account_id, calendar_id, title, start, end, ... | Create event in external calendar |
+| `atc.delete_external_event` | account_id, event_id | Delete event in external calendar |
+| `atc.create_calendar_trigger` | name, account_id, keyword, lead_time, actions | Create calendar trigger |
+| `atc.delete_calendar_trigger` | trigger_id | Delete calendar trigger |
 
 ---
 
@@ -241,7 +276,18 @@ Security: Whitelist of chat IDs allowed to send commands.
 - For "Own Bot": Bot Token, Chat ID, send test message
 - For "HA Telegram Bot": Select existing notification service
 
-### Step 3 – Default Settings
+### Step 3 – External Calendar Accounts (optional, repeatable)
+- Select provider: Microsoft 365 / Outlook, Google Calendar, Apple iCloud Calendar
+- **Microsoft 365**: OAuth2 Device Code Flow (opens browser with code) → user signs in at Microsoft → token is stored
+- **Google**: OAuth2 Authorization Code Flow with PKCE → redirects to local HA callback → token is stored
+- **Apple / iCloud**: Enter Apple ID + app-specific password (no OAuth, CalDAV-based)
+- Display name for the account (e.g. "John Work", "Family")
+- After authentication: fetch available calendars and present for selection
+- Per calendar: set sync direction (`Bidirectional`, `Inbound only`, `Outbound only`)
+- Multiple accounts of the same provider are supported (e.g. two Google accounts)
+- Configure sync interval (recommended: every 5–15 minutes; push notifications where available)
+
+### Step 4 – Default Settings
 - Default lead time for reminder notifications
 - Time zone (default: HA time zone)
 
@@ -326,7 +372,7 @@ Export and import timers and reminders as YAML/JSON – useful for backups and s
 - Actions (`turn_on`, `turn_off`, duration)
 - Conditions (entity state, template)
 - HA entities (switch, sensor)
-- Config Flow (without Telegram)
+- Config Flow (without Telegram, without external calendars)
 - Calendar platform
 - Services
 
@@ -337,13 +383,23 @@ Export and import timers and reminders as YAML/JSON – useful for backups and s
 - HA To-Do platform integration
 - Sunrise/sunset trigger
 
-### Phase 3 – Convenience & Extensions
+### Phase 3 – External Calendar Integration
+- Google Calendar: OAuth2, bidirectional sync, calendar triggers
+- Microsoft 365 / Outlook: Graph API, OAuth2 Device Code, bidirectional sync
+- Apple iCloud Calendar: CalDAV, bidirectional sync
+- Multi-account management in Config/Options Flow
+- Configurable sync interval; Microsoft/Google webhook push support
+- Calendar triggers: appointments as HA automation triggers
+- Outbound sync: HA timers and reminders written to external calendars
+
+### Phase 4 – Convenience & Extensions
 - Lovelace cards
 - Smart watering algorithm
 - Timer templates
 - Import/export
 - Bot inline keyboards
 - Statistics
+- Further Office integrations (Microsoft Teams presence, To Do, etc.)
 
 ---
 
@@ -358,3 +414,319 @@ Before starting implementation, please decide on the following:
 5. **Confirm Phase 1 scope**: Is the MVP sensibly scoped, or should certain features be moved forward/back?
 6. **Telegram priority**: Should Telegram already be included in Phase 1 (as it is a core requirement)?
 7. **UI text language**: German and English from the start (`translations/de.json` + `en.json`)?
+8. **Calendar accounts**: Should OAuth2 app registration (Client ID/Secret) be done by the user (self-registered app) or should a shared/central app registration be used?
+9. **Token security**: Should OAuth2 tokens be stored encrypted in HA Storage API (recommended with `HA secrets` / `keyring`)?
+10. **Conflict resolution on sync**: Which strategy should apply when there are simultaneous changes (HA wins, remote wins, newest timestamp wins)?
+
+---
+
+## 14. Bidirectional Calendar Integration (Microsoft 365 / Google / Apple)
+
+### 14.1 Overview & Supported Providers
+
+| Provider | Protocol / API | Authentication |
+|----------|---------------|----------------|
+| Microsoft 365 / Outlook | Microsoft Graph API (REST) | OAuth2 – Device Code Flow or Authorization Code Flow with PKCE |
+| Google Calendar | Google Calendar API v3 (REST) | OAuth2 – Authorization Code Flow with PKCE |
+| Apple iCloud Calendar | CalDAV (RFC 4791) | App-specific password (Apple ID + iCloud password alternative) |
+| Exchange Server (On-Premise) | EWS (Exchange Web Services) or CalDAV | NTLM / Basic Auth / Modern Auth |
+
+Multiple accounts of the same or different providers are fully supported. Each account is independently configurable.
+
+### 14.2 Architecture: External Calendar Engine
+
+```
+external_calendars/
+├── base.py              AbstractCalendarProvider
+│                         – authenticate()
+│                         – list_calendars()
+│                         – get_events(calendar_id, start, end)
+│                         – create_event(calendar_id, event)
+│                         – update_event(calendar_id, event_id, changes)
+│                         – delete_event(calendar_id, event_id)
+│                         – subscribe_push(calendar_id, callback_url)  # optional
+│
+├── microsoft.py         MicrosoftCalendarProvider
+│                         – Graph API: /me/calendars, /me/events
+│                         – Delta query for incremental sync
+│                         – Microsoft Graph Webhooks (Change Notifications)
+│
+├── google.py            GoogleCalendarProvider
+│                         – Google Calendar API v3
+│                         – sync_token for incremental sync
+│                         – Google Push Notifications (Webhook)
+│
+├── apple.py             AppleCalendarProvider
+│                         – CalDAV via caldav library
+│                         – CTags / ETags for incremental sync
+│                         – No push, polling only
+│
+├── sync_engine.py       SyncEngine
+│                         – Manages all accounts and their schedules
+│                         – Incremental sync (delta/ETag-based)
+│                         – Configurable conflict resolution strategy
+│                         – Writes to HA Storage & external calendars
+│
+├── trigger_processor.py CalendarTriggerProcessor
+│                         – Monitors incoming events for keywords/patterns
+│                         – Calculates lead time and schedules HA triggers
+│                         – Fires HA automation actions
+│
+└── oauth_handler.py     OAuthHandler
+                          – Device Code Flow (Microsoft)
+                          – Authorization Code + PKCE (Google, Microsoft)
+                          – Automatic token refresh
+                          – Tokens encrypted in HA Storage
+```
+
+### 14.3 Data Model: Calendar Account
+
+```json
+{
+  "id": "uuid",
+  "provider": "microsoft | google | apple | exchange",
+  "display_name": "John Doe – Work",
+  "owner_name": "John Doe",
+  "credentials": {
+    "access_token": "...(encrypted)...",
+    "refresh_token": "...(encrypted)...",
+    "token_expiry": "2026-04-01T10:00:00Z",
+    "scope": ["Calendars.ReadWrite"]
+  },
+  "sync_interval_minutes": 10,
+  "last_sync": "2026-03-29T15:00:00Z",
+  "calendars": [
+    {
+      "remote_id": "AQMkAD...",
+      "name": "Calendar",
+      "color": "#0078d4",
+      "sync_enabled": true,
+      "sync_direction": "bidirectional",
+      "ha_entity_id": "calendar.atc_ext_john_work_calendar",
+      "delta_token": "...",
+      "read_only": false
+    }
+  ]
+}
+```
+
+### 14.4 Data Model: Calendar Trigger (Inbound → HA)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | UUID | Unique ID |
+| `name` | string | Display name of the trigger |
+| `enabled` | bool | Active / inactive |
+| `account_id` | UUID | Linked calendar account |
+| `calendar_ids` | list[str] | Calendars to monitor (empty = all) |
+| `keyword_filter` | string\|None | Keyword in title/description (e.g. `"#smarthome"`) |
+| `tag_filter` | list[str] | Categories/tags on the calendar event |
+| `lead_time_minutes` | int | Lead time before event start (0 = at start) |
+| `also_at_end` | bool | Also fire when event ends |
+| `actions` | list | HA actions to execute |
+| `conditions` | list | Additional HA conditions |
+| `entity_target` | string\|None | Directly controlled entity (quick config) |
+| `notification` | dict\|None | Notification config |
+
+**Example configuration:**
+```
+Name: "Activate home-office mode"
+Account: John Work (Microsoft 365)
+Calendar: Calendar (main calendar)
+Keyword: "Home Office" (in title)
+Lead time: 10 minutes
+Action 1: light.office_lamp → turn_on, brightness 80%
+Action 2: switch.monitor → turn_on
+Action 3: climate.office → set_temperature 21°C
+Also at end: Yes → Turn off all devices
+```
+
+### 14.5 Data Model: Outbound Sync Configuration (HA → External Calendar)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `outbound_account_id` | UUID | Target account for outbound sync |
+| `outbound_calendar_id` | string | Target calendar ID |
+| `sync_timers` | bool | Export timer triggers as external events |
+| `sync_reminders` | bool | Export reminders as external events |
+| `sync_prefix` | string | Prefix for exported events (e.g. `"[HA]"`) |
+| `include_description` | bool | Write timer details into event description |
+
+### 14.6 Sync Engine: Technical Details
+
+#### Incremental Synchronisation
+- **Microsoft Graph**: `delta()` endpoint returns only changed/new/deleted events since last sync → `deltaLink` token is stored
+- **Google Calendar**: `syncToken` saved after each sync response → next query returns only changes
+- **Apple CalDAV**: Check calendar `CTag` for changes, then compare ETags of individual events
+
+#### Push Notifications (Near-Realtime)
+- **Microsoft Graph Webhooks**: Subscription on `/me/events` → callback URL (HA-internal webhook endpoint) → immediate notification on new/changed events
+- **Google Push Notifications**: Channel on Google Calendar API → observe `X-Goog-Channel-Expiration` (max. 7 days, auto-renewal)
+- **Apple CalDAV**: No push support → polling (configurable interval, default: 10 minutes)
+
+#### Conflict Resolution (configurable per account)
+| Strategy | Description |
+|----------|-------------|
+| `ha_wins` | On conflict, HA version overwrites external |
+| `remote_wins` | On conflict, external version overwrites HA |
+| `newest_wins` | Most recent `last_modified` timestamp wins |
+| `manual` | Conflict is reported as sensor state, user resolves via service call |
+
+#### Token Management
+- Access token validity checked before every API call
+- Automatic refresh via refresh token
+- On failed refresh: set sensor state to `reauth_required` and send notification
+- Tokens stored AES-256-encrypted in HA Storage API (key from `HA secret`)
+
+### 14.7 HA Entities for External Calendars
+
+| Entity | Type | Description |
+|--------|------|-------------|
+| `calendar.atc_ext_<account>_<calendar>` | Calendar | External calendar as HA CalendarEntity (read/write) |
+| `sensor.atc_ext_<account>_sync_status` | Sensor | `ok`, `syncing`, `error`, `reauth_required` |
+| `sensor.atc_ext_<account>_last_sync` | Sensor | Timestamp of last successful sync |
+| `sensor.atc_ext_<account>_next_event` | Sensor | Next upcoming event (title + start time) |
+| `binary_sensor.atc_ext_<account>_in_meeting` | Binary Sensor | `on` when an event is currently active |
+
+### 14.8 Config Flow: Adding a Calendar Account (Step by Step)
+
+```
+1. Select provider: [Microsoft 365] [Google] [Apple iCloud] [Exchange]
+
+── Microsoft 365 ──────────────────────────────────────────────
+2. Enter display name: "Personal / Work / Family"
+3. Start Device Code Flow:
+   → Code is displayed: "Go to https://microsoft.com/devicelogin and enter: ABCD-EFGH"
+   → Integration waits for authentication (timeout: 5 minutes)
+   → On success: "✅ Successfully authenticated as john@contoso.com"
+4. Calendar list is loaded → user selects calendars
+5. Per calendar: sync direction (Bidirectional / Inbound only / Outbound only)
+
+── Google Calendar ────────────────────────────────────────────
+2. Enter display name
+3. OAuth2 Authorization URL is generated:
+   → HA opens an internal callback endpoint on port 8123
+   → User opens URL in browser → signs in to Google → grants permissions
+   → After redirect: token automatically saved
+4. Calendar list → select → sync direction
+
+── Apple iCloud ───────────────────────────────────────────────
+2. Enter display name
+3. Enter Apple ID (email)
+4. Enter app-specific password (hint: https://appleid.apple.com → Security)
+5. CalDAV server is discovered (automatically via DNS-SRV record)
+6. Calendar list → select → sync direction
+```
+
+### 14.9 Demarcation from Existing HA Integrations
+
+| Integration | Difference from ATC |
+|-------------|---------------------|
+| HA `google` (Google Calendar) | Read-only, no trigger processing, no outbound sync |
+| HA `microsoft365` (via HACS) | No direct timer/reminder sync, no keyword triggers |
+| HA native CalDAV | Read-only, no write support, no triggers |
+| ATC (this concept) | Fully bidirectional, keyword triggers, multi-account, deeply integrated with timers/reminders |
+
+---
+
+## 15. Further Microsoft Office / Productivity Integrations
+
+### 15.1 Microsoft Teams – Presence & Meeting Control
+
+**Scenario**: When the user is in a Teams meeting → dim office light, turn on "Do Not Disturb" LED, silence doorbell notifications.
+
+**Technical implementation**:
+- Microsoft Graph API: `GET /me/presence` – returns presence status (`Available`, `Busy`, `InACall`, `InAMeeting`, `DoNotDisturb`, `Away`, `Offline`)
+- Polling every 60 seconds or Graph Change Notifications on `/communications/presences`
+- HA entities:
+  - `sensor.atc_teams_presence_<name>` → value: `available`, `busy`, `in_meeting`, `dnd`, `away`, `offline`
+  - `binary_sensor.atc_teams_in_meeting_<name>` → `on` when in a meeting
+- HA automations can react to status changes
+
+**Example automations**:
+```
+Meeting starts (InAMeeting):
+  → light.office → dim to 30%
+  → switch.dnd_light → ON
+  → notify.family → "John is in a meeting until 15:00"
+
+Meeting ends (Available):
+  → light.office → 100%
+  → switch.dnd_light → OFF
+```
+
+### 15.2 Microsoft To Do / Planner
+
+**Microsoft To Do**:
+- REST API: read/write task lists (`/me/todo/lists/{listId}/tasks`)
+- Bidirectional sync with HA ToDo platform
+- Due tasks as HA reminders → notification via Telegram
+- Create new tasks from HA (via HA dashboard or service)
+
+**Microsoft Planner** (team tasks):
+- Task status as HA sensor (e.g. project progress)
+- Create new tasks on HA events (e.g. "Replace filter" when air quality sensor exceeds threshold)
+
+### 15.3 Microsoft Outlook – Email Triggers
+
+**Scenarios**:
+- Email with subject keyword (e.g. "Package arrived") → fire HA action (notification, doorbell simulation)
+- Email notifications for HA events (e.g. alarm alert) → send email via Graph API
+- Unread emails as HA sensor (badge counter)
+
+**Technical implementation**:
+- Graph API: `/me/messages` with `$filter` and `$select`
+- Graph Webhooks on inbox for near-realtime
+- Service `atc.send_email`: send email via configured Outlook account
+
+### 15.4 Microsoft OneDrive / SharePoint
+
+**Scenarios**:
+- Automatic backup of HA configuration to OneDrive (daily/weekly)
+- Export of timer/reminder data to OneDrive
+- File trigger: new file in OneDrive folder → HA action (e.g. doorbell camera image → auto-upload)
+
+**Technical implementation**:
+- Graph API: `/me/drive/root:/path:/children` for file upload
+- Service `atc.backup_to_onedrive`: manual or automatic backup
+- Webhook on OneDrive folder for file triggers
+
+### 15.5 Google Workspace – Extensions
+
+**Google Tasks**:
+- Bidirectional sync with HA ToDo platform (analogous to Microsoft To Do)
+- Tasks as HA reminders, completion from HA
+
+**Google Meet – Presence** (via Google Calendar):
+- Derive meeting status from active Google Calendar events
+- `binary_sensor.atc_google_in_meeting_<name>` when event with Meet link is active
+
+**Google Gmail – Email Triggers**:
+- Gmail API (Pub/Sub Push) for email triggers
+- Service `atc.send_gmail`: send email via Gmail API
+
+### 15.6 Apple Extensions
+
+**Apple Reminders (via CalDAV extension)**:
+- Partially accessible via CalDAV VTODO components
+- Sync with HA ToDo platform
+
+**iCloud Drive**:
+- No official API – limited access via third-party libraries; not recommended for production use
+
+### 15.7 Overview: Integration Roadmap
+
+| Feature | Provider | Priority | Complexity | Phase |
+|---------|----------|----------|------------|-------|
+| Bidirectional calendar sync | Microsoft / Google / Apple | ⭐⭐⭐⭐⭐ | High | 3 |
+| Calendar trigger (keyword) | Microsoft / Google / Apple | ⭐⭐⭐⭐⭐ | Medium | 3 |
+| Teams presence sensor | Microsoft | ⭐⭐⭐⭐ | Medium | 4 |
+| To Do / Tasks sync | Microsoft / Google | ⭐⭐⭐⭐ | Medium | 4 |
+| Email trigger (inbox) | Microsoft / Google | ⭐⭐⭐ | Medium | 4 |
+| Send email (service) | Microsoft / Google | ⭐⭐⭐ | Low | 4 |
+| OneDrive backup | Microsoft | ⭐⭐⭐ | Low | 4 |
+| Planner tasks | Microsoft | ⭐⭐ | Medium | 5 |
+| SharePoint file trigger | Microsoft | ⭐⭐ | High | 5 |
+| iCloud Drive | Apple | ⭐ | Very high | – |
+
+---
