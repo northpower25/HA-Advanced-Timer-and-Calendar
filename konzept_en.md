@@ -176,12 +176,49 @@ Action 3: switch.valve_zone_3 → ON, delay 18 min, duration 12 min
 
 ### 3.4 Conditions
 
-Conditions block the timer trigger when not met:
+Conditions block the timer trigger when not met. Multiple conditions can be linked via AND/OR logic.
 
 - **Entity state**: e.g. `sensor.rain_sensor == 'raining'` → skip timer
 - **Time window**: Only execute between 06:00–20:00
-- **Numeric threshold**: e.g. `sensor.soil_moisture < 30`
+- **Numeric threshold**: e.g. `sensor.soil_moisture < 30` (less than / greater than value)
+- **Numeric range (from/to)**: e.g. `sensor.outdoor_temperature` between `10°C` and `25°C`
 - **Template**: Any HA template
+
+#### Condition Object (Data Model)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `entity_id` | string | Entity to evaluate |
+| `condition_type` | enum | `state`, `numeric_below`, `numeric_above`, `numeric_between`, `template` |
+| `value` | any\|None | Comparison value (for `state`, `numeric_below`, `numeric_above`) |
+| `min_value` | float\|None | Lower bound (only for `numeric_between`) |
+| `max_value` | float\|None | Upper bound (only for `numeric_between`) |
+| `logic_operator` | enum | `and` / `or` – how this condition links to the next |
+| `template` | string\|None | HA template expression (only for `template`) |
+
+**Examples:**
+```yaml
+# Outdoor temperature between 10°C and 30°C:
+entity_id: sensor.outdoor_temperature
+condition_type: numeric_between
+min_value: 10
+max_value: 30
+
+# Outdoor temperature below 5°C:
+entity_id: sensor.outdoor_temperature
+condition_type: numeric_below
+value: 5
+```
+
+#### 3.4.1 Hold Timer
+
+Each condition can be assigned a **hold time**: the measured state must be continuously satisfied for at least the specified duration before the timer event fires. This prevents false triggers from short-term measurement fluctuations (e.g. brief temperature spikes).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hold_seconds` | int\|None | Minimum duration in seconds (0 = immediate, `None` = no hold) |
+
+**Example:** Outdoor temperature below 0°C **for at least 10 minutes** → activate frost protection (`hold_seconds: 600`).
 
 ### 3.5 Scheduling Engine
 
@@ -227,9 +264,21 @@ Optional integration with HA's native `todo` platform (from HA 2023.11) for nati
 
 ---
 
-## 5. Telegram Integration
+## 5. Notifications & Telegram Integration
 
-### 5.1 Operating Modes
+### 5.0 Notification Channels
+
+One or more notification channels can be independently enabled per timer/appointment:
+
+| Channel | Description |
+|---------|-------------|
+| **Telegram (Mode A)** | Directly via Bot Token – outbound messages only |
+| **Telegram (Mode B)** | Via HA `telegram_bot` – bidirectional & interactive with inline keyboards |
+| **HA Notify** | Any HA notification service (e.g. `notify.mobile_app_phone`, `notify.pushover`, email notify, etc.) |
+
+Channels can be combined, e.g. Telegram **and** HA Notify simultaneously for the same timer.
+
+### 5.1 Operating Modes (Telegram)
 
 **Mode A – Standalone** (simple): Enter Bot Token + Chat ID directly in the Config Flow → the integration sends messages itself via the Telegram Bot API. Outbound notifications only, no inbound commands.
 
@@ -238,24 +287,72 @@ Optional integration with HA's native `todo` platform (from HA 2023.11) for nati
 - Inbound: commands and callback responses via HA events (`telegram_command`, `telegram_callback`)
 - Interactive inline keyboards for confirmations, selections, and status queries
 
-### 5.2 Notifications
+### 5.2 Notification Timing
 
-Triggered when:
+For each timer/appointment up to **three notification points** can be independently enabled or disabled:
 
-- Timer fires (start & end)
+| # | Timing | Configuration |
+|---|--------|--------------|
+| **1** | **Before** – before the timer/appointment becomes active | Time period in minutes, hours, days, or weeks before activation |
+| **2** | **After** – after the timer/appointment has become active | Time period in minutes, hours, days, or weeks after activation |
+| **3** | **Completion** – when a timer event has finished and the timer has been reset | No additional time configuration needed |
+
+**Notification config data model (`notification`):**
+
+```json
+{
+  "channels": ["telegram", "ha_notify"],
+  "ha_notify_service": "notify.mobile_app_iphone",
+  "notify_before": {
+    "enabled": true,
+    "value": 30,
+    "unit": "minutes"
+  },
+  "notify_after": {
+    "enabled": true,
+    "value": 5,
+    "unit": "minutes"
+  },
+  "notify_on_reset": true,
+  "templates": {
+    "before": "⏰ {{ name }} starts in {{ time_until }}.",
+    "after": "✅ {{ name }} has started.",
+    "reset": "🔄 {{ name }} has completed and been reset.",
+    "skipped": "⏭ {{ name }} was skipped ({{ reason }})."
+  }
+}
+```
+
+**Supported time units (`unit`):** `minutes`, `hours`, `days`, `weeks`
+
+**Trigger occasions:**
+
+- Timer fires – start (before & after)
+- Timer fires – end / reset (completion notification)
 - Condition prevents execution ("Irrigation skipped – rain detected")
 - Reminder/appointment coming up soon
 - To-do due
 - Error / timer disabled
 
-Message format configurable (template-based), e.g.:
+### 5.3 Notification Texts & Templates
 
-```
-🌿 Irrigation Zone 1 started
-Duration: 10 minutes | Next run: Tomorrow 06:00
-```
+The texts for all notification timing points are **automatically suggested** and can be individually customised per timer/appointment. Default templates are defined in `translations/de.json` and `translations/en.json`.
 
-### 5.3 Bot Control (Mode B – HA Telegram Bot)
+**Default templates (examples):**
+
+| Timing | Default text |
+|--------|-------------|
+| Before activation | `⏰ [Timer name] starts in [time period].` |
+| After activation | `✅ [Timer name] has started. Duration: [duration] min.` |
+| Completion/reset | `🔄 [Timer name] has completed and been reset.` |
+| Skipped | `⏭ [Timer name] was skipped. Reason: [condition].` |
+| Reminder | `🔔 Reminder: [Title] in [time period].` |
+
+**Template variables** (usable in all texts): `{{ name }}`, `{{ time_until }}`, `{{ duration }}`, `{{ reason }}`, `{{ next_run }}`, `{{ entity_states }}`.
+
+Templates are displayed in the ATC UI when configuring a timer/appointment and can be edited directly and tested before saving.
+
+### 5.4 Bot Control (Mode B – HA Telegram Bot)
 
 Control timers via Telegram commands (only when `telegram_bot` integration is present):
 
@@ -449,6 +546,9 @@ Following the decision for user-registered OAuth apps (see above) and the introd
 13. **Handling of Business-only features in the UI**: Should features like Teams presence and Planner be visible in the Config Flow for all users (with a note "Only for Business accounts"), or should they be completely hidden when a personal account is detected?
 14. **Google Cloud project guide for personal users**: Should a step-by-step guide for creating a Google Cloud application and OAuth Client ID be included in the documentation? This is mandatory for personal Gmail users without a central OAuth registration.
 15. **Google app verification**: Google requires app verification (security assessment, privacy policy, domain verification) for sensitive scopes (Google Calendar) and restricted scopes (Gmail). Should a fully verified central app be pursued, or will only the use of individual (unverified) Client IDs be supported initially? With unverified apps, users see a Google security warning at login.
+16. **Multiple notification channels**: Should multiple channels (e.g. Telegram AND HA Notify) be configurable simultaneously per timer/appointment, and should the channel selection be presented in the UI as a multi-select field or as individually togglable switches?
+17. **Condition logic AND/OR groups**: Should condition linking only support simple flat AND/OR, or should nested groups (e.g. `(A AND B) OR C`) be possible? The latter greatly increases flexibility but also the complexity of the UI.
+18. **YAML expert mode**: Should the YAML expert mode be a live editor with syntax highlighting (e.g. CodeMirror), or is a read-only view with copy and download functionality sufficient initially? Should edited YAML be importable directly as a timer configuration?
 
 
 ---
@@ -481,6 +581,45 @@ If a reminder is not "acknowledged" (via Telegram button), remind again after X 
 ### 11.7 Import/Export
 Export and import timers and reminders as YAML/JSON – useful for backups and sharing configurations.
 
+### 11.8 Expert Mode: YAML Code View & Export
+
+For users with advanced HA knowledge it should be possible to view, edit, and export the **complete HA automation YAML** generated by the integration for any timer/appointment (including conditions, actions, and notifications).
+
+**Features:**
+- **View**: Per timer/appointment the equivalent HA automation YAML is displayed in the ATC UI with syntax highlighting.
+- **Edit**: The YAML can be edited directly in the browser; changes can be applied back to the ATC configuration.
+- **Export**: Download the YAML as a file or copy to clipboard for use in custom `automations.yaml` files.
+- **Import**: Users can paste their own HA automation YAML which is then imported as an ATC timer/appointment (where supported).
+
+**Example YAML (generated):**
+```yaml
+alias: "ATC: Garden Irrigation"
+description: "Generated by ATC – Timer ID: abc-123"
+trigger:
+  - platform: time
+    at: "06:00:00"
+condition:
+  - condition: numeric_state
+    entity_id: sensor.outdoor_temperature
+    above: 10
+    below: 30
+action:
+  - service: switch.turn_on
+    target:
+      entity_id: switch.valve_zone_1
+  - delay:
+      minutes: 10
+  - service: switch.turn_off
+    target:
+      entity_id: switch.valve_zone_1
+  - service: notify.mobile_app_iphone
+    data:
+      message: "✅ Irrigation Zone 1 complete."
+mode: single
+```
+
+**UI integration**: Accessible via a "View / export YAML" button in the timer detail view of the ATC dashboard and in the `atc-timer-card`.
+
 ---
 
 ## 12. Phase Plan (Implementation Recommendation)
@@ -490,8 +629,8 @@ Export and import timers and reminders as YAML/JSON – useful for backups and s
 - Persistence & storage (including migration engine)
 - Multi-instance support via `config_entries`
 - Scheduler engine (`daily`, `weekdays`, `interval`, `yearly`, `once`)
-- Actions (`turn_on`, `turn_off`, duration)
-- Conditions (entity state, template) – generic condition logic
+- Actions (`turn_on`, `turn_off`, duration per action/entity)
+- Conditions (entity state, numeric below/above, numeric range from/to, template, AND/OR, hold timer)
 - HA entities (switch, sensor)
 - Config Flow (without Telegram, without external calendars)
 - Calendar platform
@@ -499,9 +638,12 @@ Export and import timers and reminders as YAML/JSON – useful for backups and s
 - **Lovelace Custom Cards** (`atc-timer-card`, `atc-reminder-card`, `atc-status-card`)
 - **ATC Dashboard** (automatically installed default dashboard)
 
-### Phase 2 – Telegram & Reminder
+### Phase 2 – Notifications, Telegram & Reminder
 - Telegram Mode A (standalone, outbound only)
 - Telegram Mode B (HA integration, bidirectional & interactive via inline keyboards)
+- **HA Notify** as notification channel (in addition to Telegram, combinable)
+- **Structured notification timing** (before, after, on completion/reset) with units minutes/hours/days/weeks
+- **Customisable notification text templates** with proposed defaults (per timer/appointment)
 - Reminder/calendar types (anniversaries, to-dos)
 - HA To-Do platform integration
 - Sunrise/sunset trigger
@@ -519,7 +661,8 @@ Export and import timers and reminders as YAML/JSON – useful for backups and s
 ### Phase 4 – Convenience & Extensions
 - Smart watering algorithm (irrigation profile as extension of generic condition logic)
 - Timer templates
-- Import/export
+- Import/export (YAML/JSON backup & sharing)
+- **Expert mode: YAML code view, edit & export** (complete automation YAML per timer/appointment)
 - Notification escalation
 - Statistics & history
 - Further Office integrations (Microsoft Teams presence, To Do, etc.)
