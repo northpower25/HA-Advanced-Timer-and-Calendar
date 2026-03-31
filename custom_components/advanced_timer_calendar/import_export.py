@@ -101,7 +101,7 @@ class ATCImportExport:
                 data["reminders"] = []
                 existing_ids = set()
             for reminder in incoming_reminders:
-                if not isinstance(reminder, dict) or "title" not in reminder:
+                if not isinstance(reminder, dict) or "name" not in reminder:
                     errors.append(f"Invalid reminder: {reminder.get('id', '?')}")
                     continue
                 if merge and reminder.get("id") in existing_ids:
