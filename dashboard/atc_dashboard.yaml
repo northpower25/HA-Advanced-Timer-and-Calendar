@@ -1,27 +1,429 @@
-title: ATC Dashboard
+# HA Advanced Timer & Calendar – Dashboard
+#
+# INSTALLATION:
+# 1. In Home Assistant, go to Settings → Dashboards
+# 2. Click "+ ADD DASHBOARD" → "New dashboard from scratch"
+# 3. Give it a name (e.g. "ATC – Advanced Timer & Calendar")
+# 4. After creation, open the three-dots menu → "Edit Dashboard"
+# 5. Open the three-dots menu again → "Raw configuration editor"
+# 6. Replace the entire content with this YAML and save
+#
+# CUSTOM CARDS – RESOURCE REGISTRATION:
+# Before using this dashboard you must register the three ATC custom cards as
+# Lovelace resources once.  Go to:
+#   Settings → Dashboards → three-dots menu → Resources → + ADD RESOURCE
+# Add one entry for each of the following URLs (Type: JavaScript module):
+#   /local/atc-timer-card.js
+#   /local/atc-reminder-card.js
+#   /local/atc-status-card.js
+# The JS files are located in the www/ folder of this repository.
+# Copy them to your HA config/www/ directory via the File Editor add-on or SSH.
+#
+# ENTITY IDs:
+# The integration creates entities using the prefix "atc_" by default.
+# If you chose a custom instance name during setup the entity IDs will
+# be based on that name.  The custom cards (atc-timer-card, atc-status-card,
+# atc-reminder-card) discover timer and reminder entities automatically.
+# Only the calendar and todo entities listed explicitly below need to be
+# adjusted when using a non-default instance name.
+#
+# Default entity IDs used in this dashboard:
+#   calendar.atc_appointments       → Termine / Appointments
+#   calendar.atc_anniversaries      → Jahrestage / Anniversaries
+#   calendar.atc_timer_schedule     → Timer-Zeitplan / Timer Schedule
+#   todo.atc_todos                  → Aufgaben / Todos
+
+title: "Advanced Timer & Calendar"
+icon: mdi:calendar-clock
+
 views:
-  - title: Timers
-    path: timers
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 1 · ÜBERSICHT / OVERVIEW
+  # ────────────────────────────────────────────────────────────────────────────
+  - title: Übersicht
+    path: overview
+    icon: mdi:view-dashboard
+    badges:
+      - entity: todo.atc_todos
+        label: "Offene Aufgaben"
+      - entity: calendar.atc_appointments
+        label: "Nächster Termin"
+      - entity: calendar.atc_anniversaries
+        label: "Nächster Jahrestag"
     cards:
-      - type: custom:atc-timer-card
-        title: All Timers
-  - title: Calendar
-    path: calendar
-    cards:
+
+      # Welcome Header
+      - type: markdown
+        content: |
+          # ⏱️ Advanced Timer & Calendar
+
+          Willkommen! Hier finden Sie eine Übersicht aller aktiven Timer, Termine und Erinnerungen.
+
+          Welcome! Here you find an overview of all active timers, appointments and reminders.
+
+          ---
+
+          | Bereich | Tab | Beschreibung |
+          |---|---|---|
+          | ⏱️ Timer | **Timer** | Timer verwalten, aktivieren, sofort ausführen |
+          | 📅 Kalender | **Kalender** | Alle Termine und Jahrestage |
+          | 🔔 Erinnerungen | **Erinnerungen** | Erinnerungen, Aufgaben, Jahrestage |
+          | 📊 Statistiken | **Statistiken** | Aktivitäts-Verlauf |
+          | ⚙️ Einstellungen | **Einstellungen** | Dienste, Kalender-Sync, Hilfe |
+          | 🐛 Debug | **Debug** | Systemstatus, Fehlerinfo |
+
+      # System Status (compact)
+      - type: custom:atc-status-card
+        title: "Systemstatus / System Status"
+
+      # Upcoming reminders – next 5
+      - type: custom:atc-reminder-card
+        title: "🔔 Nächste Erinnerungen / Upcoming Reminders"
+        max_items: 5
+        show_completed: false
+
+      # Upcoming calendar events (list week)
       - type: calendar
+        title: "📅 Bevorstehende Termine / Upcoming Appointments"
+        entities:
+          - entity: calendar.atc_appointments
+            color: "#FF9800"
+          - entity: calendar.atc_anniversaries
+            color: "#E91E63"
+          - entity: calendar.atc_timer_schedule
+            color: "#2196F3"
+        initial_view: listWeek
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 2 · TIMER
+  # ────────────────────────────────────────────────────────────────────────────
+  - title: Timer
+    path: timers
+    icon: mdi:timer-outline
+    badges: []
+    cards:
+
+      # Header
+      - type: markdown
+        content: |
+          # ⏱️ Timer-Verwaltung / Timer Management
+
+          Verwalten Sie hier alle Ihre Timer: aktivieren/deaktivieren, sofort ausführen oder den nächsten Lauf überspringen.
+
+          Manage all your timers here: enable/disable, run now or skip the next run.
+
+          > **Tipp:** Neue Timer erstellen Sie über *Entwicklerwerkzeuge → Dienste → `advanced_timer_calendar.create_timer`*.
+          > **Tip:** Create new timers via *Developer Tools → Services → `advanced_timer_calendar.create_timer`*.
+
+      # Timer management card (auto-discovers all ATC switch entities)
+      - type: custom:atc-timer-card
+        title: "Alle Timer / All Timers"
+
+      # Timer schedule in calendar view
+      - type: calendar
+        title: "📆 Timer-Zeitplan / Timer Schedule"
+        entities:
+          - entity: calendar.atc_timer_schedule
+            color: "#2196F3"
+        initial_view: listWeek
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 3 · KALENDER / CALENDAR
+  # ────────────────────────────────────────────────────────────────────────────
+  - title: Kalender
+    path: calendar
+    icon: mdi:calendar-month
+    badges: []
+    cards:
+
+      # Header
+      - type: markdown
+        content: |
+          # 📅 Kalender / Calendar
+
+          Übersicht aller Termine, Jahrestage und Timer-Zeitpläne im Monats- oder Listenformat.
+
+          Overview of all appointments, anniversaries and timer schedules in month or list format.
+
+      # Full calendar – all three ATC calendars
+      - type: calendar
+        title: "Kalenderübersicht / Calendar Overview"
+        entities:
+          - entity: calendar.atc_appointments
+            color: "#FF9800"
+          - entity: calendar.atc_anniversaries
+            color: "#E91E63"
+          - entity: calendar.atc_timer_schedule
+            color: "#2196F3"
+
+      # Upcoming appointments as list (reminder card)
+      - type: custom:atc-reminder-card
+        title: "📅 Bevorstehende Termine / Upcoming Appointments"
+        max_items: 15
+        show_completed: false
+
+      # Anniversaries section
+      - type: markdown
+        content: |
+          ---
+          ## 🎉 Jahrestage / Anniversaries
+
+          Jahrestage werden als jährlich wiederkehrende Ereignisse gespeichert.
+
+          Anniversaries are stored as annually recurring events.
+
+      - type: calendar
+        title: "🎉 Jahrestage / Anniversaries"
+        entities:
+          - entity: calendar.atc_anniversaries
+            color: "#E91E63"
+        initial_view: listMonth
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 4 · ERINNERUNGEN & AUFGABEN / REMINDERS & TODOS
+  # ────────────────────────────────────────────────────────────────────────────
+  - title: Erinnerungen
+    path: reminders
+    icon: mdi:bell-outline
+    badges: []
+    cards:
+
+      # Header
+      - type: markdown
+        content: |
+          # 🔔 Erinnerungen & Aufgaben / Reminders & Todos
+
+          Alle bevorstehenden Erinnerungen, Aufgaben und Termine auf einen Blick.
+
+          All upcoming reminders, todos and appointments at a glance.
+
+          **Farblegende / Colour legend:**
+          - 🔵 Erinnerung / Reminder
+          - 🟢 Aufgabe / Todo
+          - 🩷 Jahrestag / Anniversary
+          - 🟠 Termin / Appointment
+
+      # All open reminders & appointments
+      - type: custom:atc-reminder-card
+        title: "🔔 Offene Erinnerungen / Open Reminders"
+        max_items: 30
+        show_completed: false
+
+      # HA native todo list card
+      - type: todo-list
+        entity: todo.atc_todos
+        title: "✅ Aufgabenliste / Todo List"
+
+      # Completed items (collapsed view)
+      - type: custom:atc-reminder-card
+        title: "✅ Erledigte Erinnerungen / Completed Reminders"
+        max_items: 10
+        show_completed: true
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 5 · STATISTIKEN / STATISTICS
+  # ────────────────────────────────────────────────────────────────────────────
+  - title: Statistiken
+    path: statistics
+    icon: mdi:chart-line
+    badges: []
+    cards:
+
+      # Header
+      - type: markdown
+        content: |
+          # 📊 Statistiken / Statistics
+
+          Verlaufsdiagramme und Aktivitätsstatistiken der Integration.
+
+          History charts and activity statistics of the integration.
+
+      # Status card – shows timer counts
+      - type: custom:atc-status-card
+        title: "📊 Timer-Statistiken / Timer Statistics"
+
+      # Activity history – calendar events (7 days)
+      - type: history-graph
+        title: "⏱️ Timer-Aktivität (letzte 7 Tage / last 7 days)"
+        hours_to_show: 168
+        refresh_interval: 60
+        entities:
+          - entity: calendar.atc_timer_schedule
+            name: Timer Schedule
+
+      # Todo & appointment history (30 days)
+      - type: history-graph
+        title: "📅 Kalender & Aufgaben-Verlauf (30 Tage / 30 days)"
+        hours_to_show: 720
+        refresh_interval: 60
+        entities:
+          - entity: todo.atc_todos
+            name: Todos
+          - entity: calendar.atc_appointments
+            name: Termine
+          - entity: calendar.atc_anniversaries
+            name: Jahrestage
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 6 · EINSTELLUNGEN / SETTINGS
+  # ────────────────────────────────────────────────────────────────────────────
+  - title: Einstellungen
+    path: settings
+    icon: mdi:cog
+    badges: []
+    cards:
+
+      # Header
+      - type: markdown
+        content: |
+          # ⚙️ Einstellungen / Settings
+
+          Aktionen, Dienste und Konfiguration der Advanced Timer & Calendar Integration.
+
+          Actions, services and configuration of the Advanced Timer & Calendar integration.
+
+          > ℹ️ **Hinweis / Note:**  
+          > Grundeinstellungen (Zeitzone, Standard-Erinnerungsvorlaufzeit, Benachrichtigungen) ändern Sie über  
+          > *Einstellungen → Geräte & Dienste → Advanced Timer & Calendar → ⚙️ Konfigurieren*.
+
+      # ── Calendar Sync ─────────────────────────────────────────────────────────
+
+      - type: markdown
+        content: |
+          ---
+          ## 🔄 Kalender-Synchronisation / Calendar Sync
+
+          Synchronisiert ATC-Termine bidirektional mit Google Kalender oder Microsoft 365 (Outlook).
+
+          Synchronizes ATC appointments bidirectionally with Google Calendar or Microsoft 365 (Outlook).
+
+          **Voraussetzung / Prerequisite:** Kalender-Sync muss im Setup-Flow konfiguriert worden sein  
+          (*Einstellungen → Geräte & Dienste → Integration hinzufügen → Advanced Timer & Calendar →  
+          Schritt „Kalender-Sync" → Google oder Microsoft auswählen und OAuth-Credentials eingeben*).
+
+      - type: button
+        name: "🔄 Jetzt synchronisieren / Sync Now"
+        icon: mdi:sync
+        show_state: false
+        tap_action:
+          action: call-service
+          service: advanced_timer_calendar.sync_calendar
+          service_data: {}
+
+      - type: entities
+        title: "Kalender-Aktionen / Calendar Actions"
+        entities:
+          - name: "Kalender-Konto hinzufügen / Add Calendar Account"
+            icon: mdi:calendar-plus
+            type: button
+            action_name: Dienst öffnen
+            tap_action:
+              action: call-service
+              service: advanced_timer_calendar.add_calendar_account
+              service_data: {}
+          - name: "Kalender-Konto entfernen / Remove Calendar Account"
+            icon: mdi:calendar-minus
+            type: button
+            action_name: Dienst öffnen
+            tap_action:
+              action: call-service
+              service: advanced_timer_calendar.remove_calendar_account
+              service_data: {}
+
+      # ── Timer Actions ─────────────────────────────────────────────────────────
+
+      - type: markdown
+        content: |
+          ---
+          ## ⏱️ Timer-Dienste / Timer Services
+
+          Alle verfügbaren Dienste zur Timer-Verwaltung (Entwicklerwerkzeuge → Dienste):
+
+          | Dienst | Beschreibung |
+          |---|---|
+          | `create_timer` | Neuen Timer erstellen |
+          | `update_timer` | Timer bearbeiten |
+          | `delete_timer` | Timer löschen |
+          | `enable_timer` | Timer aktivieren |
+          | `disable_timer` | Timer deaktivieren |
+          | `pause_timer` | Timer pausieren |
+          | `run_now` | Timer sofort ausführen |
+          | `skip_next` | Nächsten Lauf überspringen |
+
+      # ── Reminder / Appointment Actions ───────────────────────────────────────
+
+      - type: markdown
+        content: |
+          ---
+          ## 🔔 Erinnerungs-Dienste / Reminder Services
+
+          | Dienst | Beschreibung |
+          |---|---|
+          | `create_reminder` | Erinnerung, Termin oder Jahrestag erstellen |
+          | `complete_todo` | Aufgabe als erledigt markieren |
+          | `create_calendar_trigger` | Kalender-Trigger erstellen |
+          | `delete_calendar_trigger` | Kalender-Trigger löschen |
+          | `create_external_event` | Externen Termin im Fremdkalender erstellen |
+          | `delete_external_event` | Externen Termin aus Fremdkalender löschen |
+
+      # ── Import / Export ───────────────────────────────────────────────────────
+
+      - type: markdown
+        content: |
+          ---
+          ## 💾 Import / Export
+
+          Timer und Erinnerungen können als JSON gesichert und wiederhergestellt werden.  
+          Verwenden Sie dazu die HA-Dienste `advanced_timer_calendar.*` in den Entwicklerwerkzeugen.
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 7 · DEBUG
+  # ────────────────────────────────────────────────────────────────────────────
+  - title: Debug
+    path: debug
+    icon: mdi:bug
+    badges: []
+    cards:
+
+      # Header
+      - type: markdown
+        content: |
+          # 🐛 Debug-Informationen / Debug Information
+
+          Technische Details zur Fehleranalyse und Systemüberwachung.
+
+          Technical details for troubleshooting and system monitoring.
+
+      # Full status card
+      - type: custom:atc-status-card
+        title: "🐛 Vollständiger Systemstatus / Full System Status"
+
+      # Calendar entity states
+      - type: entities
+        title: "📅 Kalender-Entitäten / Calendar Entities"
+        entities:
+          - entity: calendar.atc_appointments
+            name: "Termine / Appointments"
+          - entity: calendar.atc_anniversaries
+            name: "Jahrestage / Anniversaries"
+          - entity: calendar.atc_timer_schedule
+            name: "Timer-Zeitplan / Timer Schedule"
+
+      # Todo entity state
+      - type: entities
+        title: "✅ Aufgaben-Entität / Todo Entity"
+        entities:
+          - entity: todo.atc_todos
+            name: "Aufgaben / Todos"
+
+      # Logbook for ATC-related events
+      - type: logbook
+        title: "📋 Ereignisprotokoll / Event Log"
+        hours_to_show: 24
         entities:
           - calendar.atc_appointments
           - calendar.atc_anniversaries
           - calendar.atc_timer_schedule
-  - title: Reminders & Todos
-    path: reminders
-    cards:
-      - type: custom:atc-reminder-card
-        title: Upcoming Reminders
-      - type: todo-list
-        entity: todo.atc_todos
-  - title: Status
-    path: status
-    cards:
-      - type: custom:atc-status-card
-        title: ATC System Status
+          - todo.atc_todos
+

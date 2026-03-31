@@ -25,13 +25,16 @@ class ATCVoiceNotifier:
         if provider == VoiceProvider.NONE:
             return
 
-        media_players = config.get("voice_media_player", "")
+        media_players = config.get("voice_media_player", [])
         if not media_players:
             _LOGGER.warning("No voice media player configured.")
             return
 
-        # Support comma-separated list of entity IDs
-        entity_ids = [e.strip() for e in media_players.split(",") if e.strip()]
+        # Support both a list (from entity selector) and a legacy comma-separated string
+        if isinstance(media_players, list):
+            entity_ids = [e for e in media_players if e]
+        else:
+            entity_ids = [e.strip() for e in media_players.split(",") if e.strip()]
         volume = config.get("voice_volume", 0.5)
         tts_engine = config.get("voice_tts_engine", "tts.cloud_say")
         language = config.get("voice_language", "")
