@@ -13,7 +13,7 @@
       },
       "telegram": {
         "title": "Telegram (optional)",
-        "description": "Choose how this integration should send Telegram notifications. Select **None** to skip.",
+        "description": "Choose how this integration should send Telegram notifications.\n\n• **None** – No Telegram notifications.\n• **mode_a** – Notification only: sends alerts using your own bot token (direct API).\n• **mode_b** – Notification & Control: uses an existing Home Assistant **telegram_bot** integration, supports bot commands.\n\nSelect **None** to skip.",
         "data": {
           "telegram_mode": "Telegram mode"
         }
@@ -31,15 +31,17 @@
         }
       },
       "telegram_ha": {
-        "title": "Telegram – HA telegram_bot Integration",
-        "description": "This mode uses the **telegram_bot** integration already configured in Home Assistant.\n\nPrerequisite: add `telegram_bot:` to your `configuration.yaml` or set it up via the HA UI before continuing here.\n\nSelect the notify service that belongs to your Telegram bot (or leave blank to use the default). Then enter the chat ID to receive messages.",
+        "title": "Telegram – HA telegram_bot Integration (mode_b)",
+        "description": "This mode uses a **telegram_bot** integration already configured in Home Assistant.\n\n**Prerequisite:** Set up the [Telegram Bot integration](https://www.home-assistant.io/integrations/telegram_bot/) in Home Assistant first (Settings → Devices & Services → Add Integration → Telegram Bot). You will need your bot token from **@BotFather**.\n\nOnce configured, select your bot instance from the dropdown. Then enter the Chat ID of the person or group that should receive messages.\n\n**How to find your Chat ID:**\nSend any message to **@userinfobot** on Telegram – it will reply with your numeric Chat ID.",
         "data": {
+          "telegram_bot_entry_id": "Telegram Bot instance",
           "telegram_notify_service": "Telegram notify service",
           "telegram_chat_id": "Chat ID"
         },
         "data_description": {
-          "telegram_notify_service": "Select one of the detected HA notify services that belongs to your Telegram bot. If none are listed the telegram_bot integration is not yet configured.",
-          "telegram_chat_id": "Your numeric Telegram chat ID (from @userinfobot, e.g. 123456789 or -100…)."
+          "telegram_bot_entry_id": "Select the Telegram Bot instance configured in Home Assistant. If none appear, set up the Telegram Bot integration first.",
+          "telegram_notify_service": "HA notify service belonging to your Telegram bot (fallback when no bot instance is found).",
+          "telegram_chat_id": "Your numeric Telegram Chat ID (from @userinfobot, e.g. 123456789 or -100…). This is where notifications will be sent."
         }
       },
       "voice": {
@@ -100,14 +102,14 @@
       },
       "settings": {
         "title": "Default settings",
-        "description": "Configure general defaults for this integration instance.",
+        "description": "Almost done! Configure some general defaults for this integration.\n\n**Reminder lead time:** How many minutes before an event the reminder notification is sent. The default of 30 minutes works well for most cases.\n\n**Timezone:** Only needed if you want this integration to use a different timezone than Home Assistant. Leave empty to use the Home Assistant system timezone (recommended).\n\nYou can change these settings at any time via the integration options.",
         "data": {
           "default_reminder_minutes": "Default reminder lead time (minutes)",
-          "timezone": "Timezone"
+          "timezone": "Timezone (optional)"
         },
         "data_description": {
-          "default_reminder_minutes": "How many minutes before an event the reminder notification is sent (1 – 10080).",
-          "timezone": "IANA timezone name (e.g. Europe/Berlin). Leave empty to use the Home Assistant timezone."
+          "default_reminder_minutes": "How many minutes before an event the reminder notification is sent (1 – 10080). Default: 30 minutes.",
+          "timezone": "IANA timezone name (e.g. Europe/Berlin, America/New_York). Leave empty to use the Home Assistant timezone."
         }
       }
     },
@@ -119,7 +121,7 @@
     "step": {
       "telegram": {
         "title": "Telegram",
-        "description": "Change the Telegram notification mode. Select **None** to disable.",
+        "description": "Change the Telegram notification mode.\n\n• **None** – Disabled.\n• **mode_a** – Notification only (direct Bot API).\n• **mode_b** – Notification & Control (HA telegram_bot integration).\n\nSelect **None** to disable.",
         "data": {
           "telegram_mode": "Telegram mode"
         }
@@ -137,15 +139,17 @@
         }
       },
       "telegram_ha": {
-        "title": "Telegram – HA Integration",
-        "description": "Select the HA telegram_bot notify service and your chat ID.",
+        "title": "Telegram – HA Integration (mode_b)",
+        "description": "Select your Telegram Bot instance and the Chat ID to send notifications to.",
         "data": {
+          "telegram_bot_entry_id": "Telegram Bot instance",
           "telegram_notify_service": "Telegram notify service",
           "telegram_chat_id": "Chat ID"
         },
         "data_description": {
-          "telegram_notify_service": "HA notify service belonging to your Telegram bot.",
-          "telegram_chat_id": "Your numeric Telegram chat ID."
+          "telegram_bot_entry_id": "Select the Telegram Bot instance configured in Home Assistant.",
+          "telegram_notify_service": "HA notify service belonging to your Telegram bot (fallback).",
+          "telegram_chat_id": "Your numeric Telegram Chat ID (from @userinfobot)."
         }
       },
       "voice": {
@@ -206,14 +210,14 @@
       },
       "settings": {
         "title": "Default settings",
-        "description": "Update general defaults for this instance.",
+        "description": "Update general defaults for this instance.\n\nLeave the timezone empty to use the Home Assistant system timezone.",
         "data": {
           "default_reminder_minutes": "Default reminder lead time (minutes)",
-          "timezone": "Timezone"
+          "timezone": "Timezone (optional)"
         },
         "data_description": {
           "default_reminder_minutes": "Minutes before an event the reminder is sent (1 – 10080).",
-          "timezone": "IANA timezone name. Leave empty for the Home Assistant timezone."
+          "timezone": "IANA timezone name (e.g. Europe/Berlin). Leave empty for the Home Assistant timezone."
         }
       }
     },
@@ -225,8 +229,8 @@
     "telegram_mode": {
       "options": {
         "none": "None – Telegram disabled",
-        "mode_a": "Direct Bot API (own bot token + chat ID)",
-        "mode_b": "HA telegram_bot integration (uses existing HA config)"
+        "mode_a": "mode_a – Notification only (own bot token + Chat ID)",
+        "mode_b": "mode_b – Notification & Control (uses existing HA telegram_bot integration)"
       }
     },
     "voice_provider": {

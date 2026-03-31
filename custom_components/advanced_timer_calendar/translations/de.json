@@ -8,12 +8,12 @@
           "name": "Instanzname"
         },
         "data_description": {
-          "name": "Ein eindeutiger Name für diese Integrationsinstanz (z. B. „ATC")."
+          "name": "Ein eindeutiger Name für diese Integrationsinstanz (z. B. ATC)."
         }
       },
       "telegram": {
         "title": "Telegram (optional)",
-        "description": "Wählen Sie, wie diese Integration Telegram-Benachrichtigungen versenden soll. Wählen Sie **Keiner** um zu überspringen.",
+        "description": "Wählen Sie, wie diese Integration Telegram-Benachrichtigungen versenden soll.\n\n• **Keiner** – Keine Telegram-Benachrichtigungen.\n• **mode_a** – Nur Benachrichtigung: sendet Alarme über Ihren eigenen Bot-Token (direkte API).\n• **mode_b** – Benachrichtigung & Steuerung: nutzt eine bestehende Home Assistant **telegram_bot**-Integration, unterstützt Bot-Befehle.\n\nWählen Sie **Keiner** um zu überspringen.",
         "data": {
           "telegram_mode": "Telegram-Modus"
         }
@@ -31,15 +31,17 @@
         }
       },
       "telegram_ha": {
-        "title": "Telegram – HA telegram_bot Integration",
-        "description": "Dieser Modus nutzt die in Home Assistant bereits konfigurierte **telegram_bot**-Integration.\n\nVoraussetzung: Fügen Sie `telegram_bot:` zu Ihrer `configuration.yaml` hinzu oder richten Sie es über die HA-UI ein, bevor Sie hier fortfahren.\n\nWählen Sie den Notify-Dienst Ihres Bots (oder leer lassen für den Standard) und geben Sie die Chat-ID ein.",
+        "title": "Telegram – HA telegram_bot Integration (mode_b)",
+        "description": "Dieser Modus nutzt eine in Home Assistant bereits konfigurierte **telegram_bot**-Integration.\n\n**Voraussetzung:** Richten Sie die [Telegram Bot Integration](https://www.home-assistant.io/integrations/telegram_bot/) zuerst in Home Assistant ein (Einstellungen → Geräte & Dienste → Integration hinzufügen → Telegram Bot). Sie benötigen dafür Ihren Bot-Token von **@BotFather**.\n\nNach der Einrichtung wählen Sie Ihre Bot-Instanz aus der Dropdown-Liste. Geben Sie dann die Chat-ID der Person oder Gruppe ein, die Benachrichtigungen erhalten soll.\n\n**Chat-ID ermitteln:**\nSchicken Sie **@userinfobot** eine beliebige Nachricht – er antwortet mit Ihrer numerischen Chat-ID.",
         "data": {
+          "telegram_bot_entry_id": "Telegram Bot-Instanz",
           "telegram_notify_service": "Telegram Notify-Dienst",
           "telegram_chat_id": "Chat-ID"
         },
         "data_description": {
-          "telegram_notify_service": "Wählen Sie einen der erkannten HA Notify-Dienste Ihres Telegram-Bots. Falls keine erscheinen, ist die telegram_bot-Integration noch nicht eingerichtet.",
-          "telegram_chat_id": "Ihre numerische Telegram-Chat-ID (von @userinfobot, z. B. 123456789 oder -100…)."
+          "telegram_bot_entry_id": "Wählen Sie die in Home Assistant konfigurierte Telegram Bot-Instanz. Falls keine angezeigt wird, richten Sie zuerst die Telegram Bot-Integration ein.",
+          "telegram_notify_service": "HA Notify-Dienst Ihres Telegram-Bots (Rückfall, wenn keine Bot-Instanz gefunden wird).",
+          "telegram_chat_id": "Ihre numerische Telegram Chat-ID (von @userinfobot, z. B. 123456789 oder -100…). Hierhin werden Benachrichtigungen gesendet."
         }
       },
       "voice": {
@@ -95,19 +97,19 @@
         "data_description": {
           "ms_client_id": "Azure Anwendungs-ID (Client).",
           "ms_client_secret": "Azure Client-Secret-Wert. Bitte geheim halten.",
-          "ms_tenant_id": "Azure-Mandanten-ID oder „common" für mandantenübergreifende Apps (Standard: common)."
+          "ms_tenant_id": "Azure-Mandanten-ID oder 'common' für mandantenübergreifende Apps (Standard: common)."
         }
       },
       "settings": {
         "title": "Standardeinstellungen",
-        "description": "Allgemeine Standardwerte für diese Integrationsinstanz festlegen.",
+        "description": "Fast geschafft! Legen Sie einige allgemeine Standardwerte für diese Integration fest.\n\n**Erinnerungsvorlaufzeit:** Wie viele Minuten vor einem Ereignis die Erinnerungsbenachrichtigung gesendet wird. Der Standard von 30 Minuten funktioniert für die meisten Fälle gut.\n\n**Zeitzone:** Nur erforderlich, wenn diese Integration eine andere Zeitzone als Home Assistant verwenden soll. Leer lassen, um die Home-Assistant-Systemzeitzone zu verwenden (empfohlen).\n\nDiese Einstellungen können jederzeit über die Integrationsoptionen geändert werden.",
         "data": {
           "default_reminder_minutes": "Standard-Erinnerungsvorlaufzeit (Minuten)",
-          "timezone": "Zeitzone"
+          "timezone": "Zeitzone (optional)"
         },
         "data_description": {
-          "default_reminder_minutes": "Wie viele Minuten vor einem Ereignis die Erinnerungsbenachrichtigung gesendet wird (1 – 10080).",
-          "timezone": "IANA-Zeitzonenname (z. B. Europe/Berlin). Leer lassen für die Home-Assistant-Zeitzone."
+          "default_reminder_minutes": "Wie viele Minuten vor einem Ereignis die Erinnerungsbenachrichtigung gesendet wird (1 – 10080). Standard: 30 Minuten.",
+          "timezone": "IANA-Zeitzonenname (z. B. Europe/Berlin, America/New_York). Leer lassen für die Home-Assistant-Zeitzone."
         }
       }
     },
@@ -119,7 +121,7 @@
     "step": {
       "telegram": {
         "title": "Telegram",
-        "description": "Telegram-Benachrichtigungsmodus ändern. **Keiner** wählen zum Deaktivieren.",
+        "description": "Telegram-Benachrichtigungsmodus ändern.\n\n• **Keiner** – Deaktiviert.\n• **mode_a** – Nur Benachrichtigung (direkte Bot-API).\n• **mode_b** – Benachrichtigung & Steuerung (HA telegram_bot Integration).\n\n**Keiner** wählen zum Deaktivieren.",
         "data": {
           "telegram_mode": "Telegram-Modus"
         }
@@ -137,15 +139,17 @@
         }
       },
       "telegram_ha": {
-        "title": "Telegram – HA Integration",
-        "description": "Notify-Dienst und Chat-ID für die HA telegram_bot Integration anpassen.",
+        "title": "Telegram – HA Integration (mode_b)",
+        "description": "Bot-Instanz und Chat-ID für die HA telegram_bot Integration anpassen.",
         "data": {
+          "telegram_bot_entry_id": "Telegram Bot-Instanz",
           "telegram_notify_service": "Telegram Notify-Dienst",
           "telegram_chat_id": "Chat-ID"
         },
         "data_description": {
-          "telegram_notify_service": "HA Notify-Dienst des Telegram-Bots.",
-          "telegram_chat_id": "Ihre numerische Telegram-Chat-ID."
+          "telegram_bot_entry_id": "In Home Assistant konfigurierte Telegram Bot-Instanz auswählen.",
+          "telegram_notify_service": "HA Notify-Dienst des Telegram-Bots (Rückfall).",
+          "telegram_chat_id": "Ihre numerische Telegram Chat-ID (von @userinfobot)."
         }
       },
       "voice": {
@@ -201,19 +205,19 @@
         "data_description": {
           "ms_client_id": "Azure Anwendungs-ID (Client).",
           "ms_client_secret": "Azure Client-Secret-Wert.",
-          "ms_tenant_id": "Azure-Mandanten-ID oder „common"."
+          "ms_tenant_id": "Azure-Mandanten-ID oder 'common'."
         }
       },
       "settings": {
         "title": "Standardeinstellungen",
-        "description": "Allgemeine Standardwerte für diese Instanz anpassen.",
+        "description": "Allgemeine Standardwerte für diese Instanz anpassen.\n\nDie Zeitzone leer lassen, um die Home-Assistant-Systemzeitzone zu verwenden.",
         "data": {
           "default_reminder_minutes": "Standard-Erinnerungsvorlaufzeit (Minuten)",
-          "timezone": "Zeitzone"
+          "timezone": "Zeitzone (optional)"
         },
         "data_description": {
           "default_reminder_minutes": "Minuten vor einem Ereignis für die Erinnerungsbenachrichtigung (1 – 10080).",
-          "timezone": "IANA-Zeitzonenname. Leer lassen für die Home-Assistant-Zeitzone."
+          "timezone": "IANA-Zeitzonenname (z. B. Europe/Berlin). Leer lassen für die Home-Assistant-Zeitzone."
         }
       }
     },
@@ -225,8 +229,8 @@
     "telegram_mode": {
       "options": {
         "none": "Keiner – Telegram deaktiviert",
-        "mode_a": "Eigener Bot (direkte API, eigener Token + Chat-ID)",
-        "mode_b": "HA telegram_bot Integration (nutzt bestehende HA-Konfiguration)"
+        "mode_a": "mode_a – Nur Benachrichtigung (eigener Bot-Token + Chat-ID)",
+        "mode_b": "mode_b – Benachrichtigung & Steuerung (nutzt bestehende HA telegram_bot Integration)"
       }
     },
     "voice_provider": {

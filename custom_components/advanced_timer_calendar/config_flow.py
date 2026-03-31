@@ -33,6 +33,12 @@ def _list_telegram_notify_services(hass: HomeAssistant) -> list[str]:
     return sorted(k for k in notify if "telegram" in k.lower())
 
 
+def _list_telegram_bot_entries(hass: HomeAssistant) -> list[dict[str, str]]:
+    """Return configured telegram_bot integration config entries as {value, label} dicts."""
+    entries = hass.config_entries.async_entries("telegram_bot")
+    return [{"value": e.entry_id, "label": e.title} for e in entries]
+
+
 def _list_tts_services(hass: HomeAssistant) -> list[str]:
     """Return available TTS services as 'tts.<service>' strings."""
     tts = hass.services.async_services().get("tts", {})
@@ -176,24 +182,32 @@ class ATCConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_voice()
-        notify_services = _list_telegram_notify_services(self.hass)
-        if notify_services:
-            notify_widget: Any = SelectSelector(
+
+        bot_entries = _list_telegram_bot_entries(self.hass)
+        fields: dict = {}
+        if bot_entries:
+            fields[vol.Optional("telegram_bot_entry_id", default=bot_entries[0]["value"])] = SelectSelector(
                 SelectSelectorConfig(
-                    options=notify_services,
+                    options=bot_entries,
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             )
         else:
-            notify_widget = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
+            # Fallback: list notify services or free-text entry
+            notify_services = _list_telegram_notify_services(self.hass)
+            if notify_services:
+                fields[vol.Optional("telegram_notify_service", default="")] = SelectSelector(
+                    SelectSelectorConfig(options=notify_services, mode=SelectSelectorMode.DROPDOWN)
+                )
+
+        fields[vol.Required("telegram_chat_id")] = TextSelector(
+            TextSelectorConfig(type=TextSelectorType.TEXT)
+        )
         return self.async_show_form(
             step_id="telegram_ha",
-            data_schema=vol.Schema({
-                vol.Optional("telegram_notify_service", default=""): notify_widget,
-                vol.Required("telegram_chat_id"): TextSelector(
-                    TextSelectorConfig(type=TextSelectorType.TEXT)
-                ),
-            }),
+            data_schema=vol.Schema(fields),
+            errors={},
+            description_placeholders={"bot_count": str(len(bot_entries))},
         )
 
     # ── Step 3: Voice – provider selection ────────────────────────────────────
@@ -317,17 +331,23 @@ class ATCConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
             self._data.update(user_input)
-            return self.async_create_entry(title=self._data[CONF_NAME], data=self._data)
+            title = self._data.get(CONF_NAME, "ATC")
+            return self.async_create_entry(title=title, data=self._data)
+        default_minutes = int(self._data.get("default_reminder_minutes", 30))
         return self.async_show_form(
             step_id="settings",
             data_schema=vol.Schema({
-                vol.Optional("default_reminder_minutes", default=30): NumberSelector(
-                    NumberSelectorConfig(min=1, max=10080, mode=NumberSelectorMode.BOX)
+                vol.Optional("default_reminder_minutes", default=default_minutes): NumberSelector(
+                    NumberSelectorConfig(min=1, max=10080, step=1, mode=NumberSelectorMode.BOX)
                 ),
-                vol.Optional("timezone", default=""): str,
+                vol.Optional("timezone", default=""): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.TEXT)
+                ),
             }),
+            errors=errors,
         )
 
     @staticmethod
@@ -420,28 +440,32 @@ class ATCOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             self._options.update(user_input)
             return await self.async_step_voice()
-        notify_services = _list_telegram_notify_services(self.hass)
-        if notify_services:
-            notify_widget: Any = SelectSelector(
+
+        bot_entries = _list_telegram_bot_entries(self.hass)
+        fields: dict = {}
+        if bot_entries:
+            current_entry = current.get("telegram_bot_entry_id", bot_entries[0]["value"])
+            fields[vol.Optional("telegram_bot_entry_id", default=current_entry)] = SelectSelector(
                 SelectSelectorConfig(
-                    options=notify_services,
+                    options=bot_entries,
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             )
         else:
-            notify_widget = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
+            notify_services = _list_telegram_notify_services(self.hass)
+            if notify_services:
+                fields[vol.Optional("telegram_notify_service", default=current.get("telegram_notify_service", ""))] = SelectSelector(
+                    SelectSelectorConfig(options=notify_services, mode=SelectSelectorMode.DROPDOWN)
+                )
+
+        fields[vol.Required("telegram_chat_id", default=current.get("telegram_chat_id", ""))] = TextSelector(
+            TextSelectorConfig(type=TextSelectorType.TEXT)
+        )
         return self.async_show_form(
             step_id="telegram_ha",
-            data_schema=vol.Schema({
-                vol.Optional(
-                    "telegram_notify_service",
-                    default=current.get("telegram_notify_service", ""),
-                ): notify_widget,
-                vol.Required(
-                    "telegram_chat_id",
-                    default=current.get("telegram_chat_id", ""),
-                ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
-            }),
+            data_schema=vol.Schema(fields),
+            errors={},
+            description_placeholders={"bot_count": str(len(bot_entries))},
         )
 
     # ── Voice provider ─────────────────────────────────────────────────────────
@@ -578,20 +602,25 @@ class ATCOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
         current = self._current()
+        errors: dict[str, str] = {}
         if user_input is not None:
             self._options.update(user_input)
             return self.async_create_entry(title="", data=self._options)
+        default_minutes = int(current.get("default_reminder_minutes", 30) or 30)
         return self.async_show_form(
             step_id="settings",
             data_schema=vol.Schema({
                 vol.Optional(
                     "default_reminder_minutes",
-                    default=current.get("default_reminder_minutes", 30),
+                    default=default_minutes,
                 ): NumberSelector(
-                    NumberSelectorConfig(min=1, max=10080, mode=NumberSelectorMode.BOX)
+                    NumberSelectorConfig(min=1, max=10080, step=1, mode=NumberSelectorMode.BOX)
                 ),
                 vol.Optional(
-                    "timezone", default=current.get("timezone", "")
-                ): str,
+                    "timezone", default=current.get("timezone") or ""
+                ): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.TEXT)
+                ),
             }),
+            errors=errors,
         )
