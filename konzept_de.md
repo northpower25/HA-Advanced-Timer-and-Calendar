@@ -1312,7 +1312,7 @@ Meeting endet (Available):
 - Gmail API (Pub/Sub Push) für E-Mail-Trigger
 - Service `atc.send_gmail`: E-Mail senden via Gmail API
 
-> ⚠️ **Hinweis für Privatnutzer**: Die Gmail API erfordert ein Google Cloud-Projekt mit aktiviertem Pub/Sub. Gmail-Scopes gelten bei Google als „restricted" und erfordern für eine zentrale App-Registrierung eine aufwändige App-Verifizierung durch Google (Security Assessment, Datenschutzerklärung, Domain-Bestätigung). Für Privatnutzer mit eigener Client-ID ist die Nutzung möglich, zeigt aber eine Google-Sicherheitswarnung beim Login (→ Offene Frage 15).
+> ⚠️ **Hinweis für Privatnutzer**: Die Gmail API erfordert ein Google Cloud-Projekt mit aktiviertem Pub/Sub. Gmail-Scopes gelten bei Google als „restricted" und erfordern für eine zentrale App-Registrierung eine aufwändige App-Verifizierung durch Google (Security Assessment, Datenschutzerklärung, Domain-Bestätigung). Für Privatnutzer mit eigener Client-ID (Anleitung → Abschnitt 16.2) ist die Nutzung möglich, zeigt aber eine Google-Sicherheitswarnung beim Login – dies ist bei nicht verifizierten Apps normal.
 
 ### 15.6 Apple-Erweiterungen
 

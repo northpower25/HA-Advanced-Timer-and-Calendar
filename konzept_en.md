@@ -780,8 +780,6 @@ instance: garden
 - **HACS from the start**: Enables easy distribution and updates for non-technical users
 - **config_entries**: Multi-instance support via HA standard mechanism
 
-### Open Questions (Account Type Restrictions)
-
 > ℹ️ All open questions from the concept phase have been answered and incorporated into the decisions table above and the respective sections.
 
 ---
@@ -1314,7 +1312,7 @@ Meeting ends (Available):
 - Gmail API (Pub/Sub Push) for email triggers
 - Service `atc.send_gmail`: send email via Gmail API
 
-> ⚠️ **Note for personal users**: The Gmail API requires a Google Cloud project with Pub/Sub enabled. Gmail scopes are classified by Google as "restricted" and require a thorough app verification process for a central app registration (security assessment, privacy policy, domain verification). For personal users with their own Client ID, usage is possible but will display a Google security warning at login (→ Open Question 15).
+> ⚠️ **Note for personal users**: The Gmail API requires a Google Cloud project with Pub/Sub enabled. Gmail scopes are classified by Google as "restricted" and require a thorough app verification process for a central app registration (security assessment, privacy policy, domain verification). For personal users with their own Client ID (guide → Section 16.2), usage is possible but will display a Google security warning at login – this is normal for unverified apps.
 
 ### 15.6 Apple Extensions
 
