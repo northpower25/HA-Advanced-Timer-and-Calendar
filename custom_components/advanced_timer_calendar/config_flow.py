@@ -336,7 +336,10 @@ class ATCConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data.update(user_input)
             title = self._data.get(CONF_NAME, "ATC")
             return self.async_create_entry(title=title, data=self._data)
-        default_minutes = int(self._data.get("default_reminder_minutes", 30))
+        try:
+            default_minutes = int(self._data.get("default_reminder_minutes", 30) or 30)
+        except (ValueError, TypeError):
+            default_minutes = 30
         return self.async_show_form(
             step_id="settings",
             data_schema=vol.Schema({
@@ -606,7 +609,10 @@ class ATCOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             self._options.update(user_input)
             return self.async_create_entry(title="", data=self._options)
-        default_minutes = int(current.get("default_reminder_minutes", 30) or 30)
+        try:
+            default_minutes = int(current.get("default_reminder_minutes", 30) or 30)
+        except (ValueError, TypeError):
+            default_minutes = 30
         return self.async_show_form(
             step_id="settings",
             data_schema=vol.Schema({
