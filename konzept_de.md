@@ -187,39 +187,78 @@ Bedingungen blockieren den Timer-Trigger wenn nicht erfüllt. Mehrere Bedingunge
 - **Numerischer Bereich (von/bis)**: z.B. `sensor.outdoor_temperature` zwischen `10°C` und `25°C`
 - **Template**: Beliebiges HA-Template
 
-#### Bedingungsobjekt (Datenmodell)
+#### Bedingungsgruppen & Verschachtelung
+
+Bedingungen werden als **Baumstruktur** gespeichert, die beliebig tiefe Verschachtelungen ermöglicht – z.B. `(A AND B) OR C`. Jeder Knoten im Baum ist entweder eine **Bedingungsgruppe** (mit einem `operator` und einer Liste von Kind-Knoten) oder ein **Bedingungs-Item** (Blattknoten mit konkreter Prüflogik).
+
+##### Bedingungsgruppe (ConditionGroup)
 
 | Feld | Typ | Beschreibung |
 |------|-----|-------------|
+| `type` | `"group"` | Kennzeichnet diesen Knoten als Gruppe |
+| `operator` | enum | `"and"` / `"or"` – Verknüpfung aller Kind-Knoten dieser Gruppe |
+| `conditions` | list | Liste von Kind-Knoten (ConditionGroup oder ConditionItem) |
+
+##### Bedingungs-Item (ConditionItem)
+
+| Feld | Typ | Beschreibung |
+|------|-----|-------------|
+| `type` | `"item"` | Kennzeichnet diesen Knoten als Blattknoten |
 | `entity_id` | string | Zu prüfende Entität |
 | `condition_type` | enum | `state`, `numeric_below`, `numeric_above`, `numeric_between`, `template` |
 | `value` | any\|None | Vergleichswert (bei `state`, `numeric_below`, `numeric_above`) |
 | `min_value` | float\|None | Unterer Grenzwert (nur bei `numeric_between`) |
 | `max_value` | float\|None | Oberer Grenzwert (nur bei `numeric_between`) |
-| `logic_operator` | enum | `and` / `or` – Verknüpfung mit der nächsten Bedingung |
 | `template` | string\|None | HA-Template-Ausdruck (nur bei `template`) |
+| `hold_seconds` | int\|None | Haltezeit in Sekunden (0 = sofortige Auslösung, `None` = kein Hold) |
 
-**Beispiele:**
+**Beispiel – einfaches AND (flach):**
 ```yaml
-# Außentemperatur zwischen 10°C und 30°C:
-entity_id: sensor.outdoor_temperature
-condition_type: numeric_between
-min_value: 10
-max_value: 30
-
-# Außentemperatur unter 5°C:
-entity_id: sensor.outdoor_temperature
-condition_type: numeric_below
-value: 5
+conditions:
+  type: group
+  operator: and
+  conditions:
+    - type: item
+      entity_id: sensor.rain_sensor
+      condition_type: state
+      value: "dry"
+    - type: item
+      entity_id: sensor.soil_moisture
+      condition_type: numeric_below
+      value: 30
 ```
+
+**Beispiel – verschachteltes `(A AND B) OR C`:**
+```yaml
+conditions:
+  type: group
+  operator: or
+  conditions:
+    - type: group
+      operator: and
+      conditions:
+        - type: item
+          entity_id: sensor.outdoor_temperature   # A
+          condition_type: numeric_between
+          min_value: 10
+          max_value: 30
+        - type: item
+          entity_id: sensor.rain_sensor           # B
+          condition_type: state
+          value: "dry"
+    - type: item
+      entity_id: input_boolean.manual_override    # C
+      condition_type: state
+      value: "on"
+```
+
+**UI-Darstellung**: Im ATC-Frontend werden Bedingungsgruppen als visuell eingerückte Blöcke mit einem AND/OR-Selektor dargestellt. Über Schaltflächen können neue Einzelbedingungen oder Untergruppen hinzugefügt werden.
 
 #### 3.4.1 Haltezeit (Hold Timer)
 
-Jede Bedingung kann mit einer **Haltezeit** versehen werden: Der gemessene Zustand muss für mindestens die angegebene Dauer kontinuierlich erfüllt sein, bevor das Timer-Event ausgelöst wird. Dies verhindert Fehlauslösungen durch kurzzeitige Messschwankungen (z.B. kurzzeitige Temperaturschwankungen).
+Jedes Bedingungs-Item kann mit einer **Haltezeit** (`hold_seconds`) versehen werden: Der gemessene Zustand muss für mindestens die angegebene Dauer kontinuierlich erfüllt sein, bevor das Timer-Event ausgelöst wird. Dies verhindert Fehlauslösungen durch kurzzeitige Messschwankungen (z.B. kurzzeitige Temperaturschwankungen).
 
-| Feld | Typ | Beschreibung |
-|------|-----|-------------|
-| `hold_seconds` | int\|None | Mindestdauer in Sekunden (0 = sofortige Auslösung, `None` = kein Hold) |
+Das Feld `hold_seconds` ist direkt im `ConditionItem` enthalten (siehe Tabelle oben).
 
 **Beispiel:** Außentemperatur unter 0°C **für mindestens 10 Minuten** → Frostschutz aktivieren (`hold_seconds: 600`).
 
@@ -624,8 +663,16 @@ Die Vorlagen sind pro Timer/Termin individuell anpassbar. Template-Variablen sin
 
 ### Schritt 3 – Externe Kalender-Accounts (optional, wiederholbar)
 - Provider auswählen: Microsoft 365 / Outlook, Google Calendar, Apple iCloud Calendar
-- **Microsoft 365**: OAuth2 Device Code Flow (öffnet Browser mit Code) → Benutzer meldet sich bei Microsoft an → Token wird gespeichert
-- **Google**: OAuth2 Authorization Code Flow mit PKCE → Redirect auf lokalen HA-Callback → Token wird gespeichert
+- **Microsoft 365**:
+  - **Account-Typ auswählen**: „Privat (outlook.com / hotmail.com / live.com)" oder „Business (Microsoft 365 / Azure AD)"
+    - Bei Privat-Account: Business-exklusive Features (Teams-Präsenz, Planner, SharePoint) werden in der gesamten UI ausgeblendet
+    - Bei Business-Account: Alle Features sichtbar und konfigurierbar
+  - **OAuth2-App-Zugangsdaten eingeben**: Client-ID und (optional) Client-Secret aus der eigenen Azure-App-Registrierung eingeben (Anleitung → Abschnitt 16.1)
+  - Device Code Flow starten: Code wird angezeigt → Benutzer öffnet `https://microsoft.com/devicelogin` und gibt Code ein → Token wird gespeichert
+- **Google**:
+  - **OAuth2-App-Zugangsdaten eingeben**: Client-ID und Client-Secret aus dem eigenen Google Cloud-Projekt eingeben (Anleitung → Abschnitt 16.2)
+  - OAuth2 Authorization Code Flow mit PKCE → Redirect auf lokalen HA-Callback → Token wird gespeichert
+  - ⚠️ Hinweis: Nicht verifizierte Google-Apps zeigen beim Login eine Sicherheitswarnung – dies ist bei eigenen App-Registrierungen normal
 - **Apple / iCloud**: Eingabe von Apple-ID + App-spezifischem Passwort (kein OAuth, CalDAV-basiert)
 - Anzeigename für den Account (z.B. „Max Arbeit", „Familie")
 - Nach Authentifizierung: Liste verfügbarer Kalender abrufen und zur Auswahl anzeigen
@@ -715,9 +762,15 @@ instance: garten
 | **HACS-Kompatibilität** | ✅ Von Anfang an – `hacs.json` im Repo-Root, HACS-konforme Verzeichnisstruktur |
 | **UI-Sprachen** | Deutsch und Englisch von Anfang an (`translations/de.json` + `en.json`) |
 | **Cron-Ausdrücke** | Optionaler `cron`-Schedule-Typ für fortgeschrittene Nutzer (via enthaltener `croniter`-Bibliothek) |
-| **OAuth2-App-Registrierung** | Eigene App-Registrierung durch den Nutzer (Client-ID/Secret im Config Flow eingeben) |
 | **Token-Sicherheit** | AES-256-Verschlüsselung via HA `secrets` / `keyring`, kein Klartext in Storage |
 | **Konfliktlösung bei Sync** | Konfigurierbar pro Account: `ha_wins`, `remote_wins`, `newest_wins`, `manual` |
+| **OAuth2-App-Registrierung** | Eigene App-Registrierung durch den Nutzer (keine zentrale App; zentrale Registrierung ggf. in späterer Phase) |
+| **Microsoft-Account-Typ im Setup** | Im Config Flow explizit zwischen „Privat (outlook.com / hotmail.com)" und „Business (M365 / Azure AD)" unterscheiden; Business-exklusive Features werden für Privat-Accounts ausgeblendet |
+| **Business-only-Features in der UI** | Features wie Teams-Präsenz und Planner werden vollständig ausgeblendet, wenn ein privater Microsoft-Account erkannt wurde |
+| **OAuth-Setup-Anleitungen** | Schritt-für-Schritt-Anleitungen für Microsoft Azure App Registration und Google Cloud OAuth (Stand 2026) in Abschnitt 16 aufgenommen |
+| **Mehrfach-Benachrichtigungskanäle** | Mehrere Kanäle pro Timer/Termin gleichzeitig wählbar; UI: Multi-Select-Feld (Checkboxen) |
+| **Bedingungslogik AND/OR-Gruppen** | Verschachtelte Gruppen `(A AND B) OR C` werden unterstützt (Baumstruktur, beliebige Tiefe); UI zeigt eingerückte Gruppe mit AND/OR-Selektor |
+| **YAML-Experten-Modus** | Live-Editor mit Syntax-Highlighting (CodeMirror); editierter YAML kann direkt als Timer-Konfiguration übernommen werden |
 
 ### Empfohlene Designentscheidungen
 
@@ -727,19 +780,7 @@ instance: garten
 - **HACS von Anfang an**: Ermöglicht einfache Distribution und Updates für Laien
 - **config_entries**: Multi-Instance-Support über HA-Standard-Mechanismus
 
-### Offene Fragen (Account-Typ-Einschränkungen)
-
-Durch die Entscheidung für eigene App-Registrierung pro Nutzer (s. oben) und die Einführung der Account-Typ-Unterscheidung ergeben sich weitere Fragen:
-
-11. **OAuth2-Registrierungsstrategie**: Soll eine zentrale App-Registrierung durch den Integration-Maintainer bereitgestellt werden (empfohlen für Privatnutzer, da private Microsoft-Accounts keinen Zugang zum Azure Portal haben), oder soll jeder Nutzer eine eigene App in Azure Portal / Google Cloud Console registrieren? Eine zentrale Registrierung erleichtert die Einrichtung erheblich, erfordert aber ggf. eine App-Verifizierung bei Microsoft/Google sowie laufende Pflege der App-Registrierung.
-12. **Microsoft-Account-Typ im Setup erkennen**: Soll im Config Flow explizit zwischen „Privat (outlook.com / hotmail.com)" und „Business (Microsoft 365 / Azure AD)" unterschieden werden, um den Nutzer automatisch auf verfügbare Features hinzuweisen und nicht verfügbare (z.B. Teams-Präsenz, Planner) auszublenden?
-13. **Umgang mit Business-only-Features in der UI**: Sollen Funktionen wie Teams-Präsenz und Planner im Config Flow für alle Nutzer sichtbar sein (mit einem Hinweis „Nur für Business-Accounts"), oder sollen sie vollständig ausgeblendet werden, wenn ein privater Account erkannt wird?
-14. **Google Cloud-Projekt für private Nutzer**: Soll eine Schritt-für-Schritt-Anleitung zur Erstellung einer eigenen Google Cloud-Anwendung und OAuth-Client-ID in die Dokumentation aufgenommen werden? Dies ist für private Gmail-Nutzer ohne zentrale OAuth-Registrierung zwingend erforderlich.
-15. **App-Verifizierung bei Google**: Google verlangt für sensitive Scopes (Google Calendar) und restricted Scopes (Gmail) eine App-Verifizierung (Security Assessment, Datenschutzerklärung). Soll eine zentrale, vollständig verifizierte App angestrebt werden, oder wird zunächst nur die Nutzung mit eigenen (unverifizierten) Client-IDs unterstützt? Bei unverifizierten Apps sehen Nutzer beim Login eine Google-Sicherheitswarnung.
-16. **Mehrfach-Benachrichtigungskanäle**: Sollen für einen Timer/Termin mehrere Kanäle gleichzeitig konfigurierbar sein (z.B. Telegram UND HA Notify), und soll die Kanalauswahl in der UI als Multi-Select-Feld oder als separate, einzeln aktivierbare Schalter dargestellt werden?
-17. **Bedingungslogik AND/OR-Gruppen**: Soll die Bedingungsverknüpfung nur einfaches flaches AND/OR unterstützen, oder sollen verschachtelte Gruppen (z.B. `(A AND B) OR C`) möglich sein? Letzteres erhöht die Flexibilität erheblich, aber auch die Komplexität der UI.
-18. **YAML-Exporten-Modus**: Soll der YAML-Experten-Modus ein Live-Editor mit Syntax-Highlighting (z.B. CodeMirror) sein, oder reicht zunächst ein schreibgeschütztes Anzeigefenster mit Kopier- und Download-Funktion? Soll editierter YAML direkt als Timer-Konfiguration übernommen werden können?
-
+> ℹ️ Alle offenen Fragen aus der Konzeptphase sind beantwortet und in die Entscheidungstabelle oben sowie in die jeweiligen Abschnitte eingearbeitet.
 
 ---
 
@@ -776,10 +817,11 @@ Timer und Reminder als YAML/JSON exportieren und importieren – nützlich für 
 Für Nutzer mit fortgeschrittenen HA-Kenntnissen soll es möglich sein, die **vollständige, von der Integration generierte HA-Automatisierungs-YAML** (inkl. Bedingungen, Aktionen und Benachrichtigungen) einzusehen, zu bearbeiten und zu exportieren.
 
 **Funktionen:**
-- **Anzeige**: Pro Timer/Termin wird der äquivalente HA-Automatisierungs-YAML-Code in der ATC-UI angezeigt (Syntax-Highlighting).
-- **Bearbeitung**: Der YAML-Code kann direkt im Browser bearbeitet werden; Änderungen können zurück in die ATC-Konfiguration übernommen werden.
-- **Export**: Download des YAML-Codes als Datei oder Kopieren in die Zwischenablage für die Verwendung in eigenen `automations.yaml`-Dateien.
-- **Import**: Benutzer können einen eigenen HA-Automatisierungs-YAML einfügen, der dann als ATC-Timer/Termin importiert wird (soweit möglich).
+- **Live-Editor mit Syntax-Highlighting**: Ein eingebetteter **CodeMirror**-Editor zeigt den generierten HA-Automatisierungs-YAML direkt im Browser an – mit YAML-Syntax-Highlighting, Zeilennummern und Fehlermarkierungen. Der Editor ist für Anfänger didaktisch wertvoll: Er macht sichtbar, wie UI-Konfigurationen als YAML-Automatisierungen aussehen.
+- **Direkte Übernahme**: Änderungen im Editor können per Klick auf „Übernehmen" direkt als Timer-Konfiguration gespeichert werden. Der YAML wird dabei validiert und in das interne ATC-Datenmodell zurückkonvertiert.
+- **Export**: Download des YAML-Codes als `.yaml`-Datei oder Kopieren in die Zwischenablage für die Verwendung in eigenen `automations.yaml`-Dateien.
+- **Import**: Benutzer können einen eigenen HA-Automatisierungs-YAML einfügen oder hochladen, der dann als ATC-Timer/Termin importiert wird (soweit das Schema kompatibel ist).
+- **Fehlerbehandlung**: Bei ungültigem YAML oder inkompatiblem Schema wird eine verständliche Fehlermeldung angezeigt; die bestehende Konfiguration bleibt erhalten.
 
 **Beispiel-YAML (generiert):**
 ```yaml
@@ -808,7 +850,7 @@ action:
 mode: single
 ```
 
-**UI-Integration**: Erreichbar über eine Schaltfläche „YAML anzeigen / exportieren" in der Timer-Detailansicht des ATC-Dashboards sowie in der `atc-timer-card`.
+**UI-Integration**: Erreichbar über eine Schaltfläche „YAML-Editor öffnen" in der Timer-Detailansicht des ATC-Dashboards sowie in der `atc-timer-card`. Der Editor öffnet sich als modaler Dialog mit dem CodeMirror-Live-Editor.
 
 ---
 
@@ -1102,24 +1144,38 @@ Auch bei Terminende: Ja → Alle Geräte ausschalten
 
 ── Microsoft 365 ──────────────────────────────────────────────
 2. Anzeigename eingeben: „Privat / Arbeit / Familie"
-3. Device Code Flow starten:
+3. Account-Typ auswählen:
+   ○ Privat (outlook.com / hotmail.com / live.com)
+   ○ Business (Microsoft 365 / Azure AD / Entra ID)
+   → Business-exklusive Features (Teams-Präsenz, Planner, SharePoint) werden
+     nur bei Account-Typ „Business" in der UI angezeigt.
+4. Azure App-Registrierung eingeben:
+   Client-ID:     [________________________________]
+   Client-Secret: [________________________________] (optional für Device Code Flow)
+   → Anleitung zur App-Registrierung: Abschnitt 16.1
+5. Device Code Flow starten:
    → Code wird angezeigt: „Gehe zu https://microsoft.com/devicelogin und gib ein: ABCD-EFGH"
    → Integration wartet auf Authentifizierung (Timeout: 5 Minuten)
    → Nach Erfolg: „✅ Erfolgreich authentifiziert als max@contoso.com"
-4. Kalender-Liste wird geladen → Benutzer wählt Kalender aus
-5. Pro Kalender: Sync-Richtung (Bidirektional / Nur eingehend / Nur ausgehend)
+6. Kalender-Liste wird geladen → Benutzer wählt Kalender aus
+7. Pro Kalender: Sync-Richtung (Bidirektional / Nur eingehend / Nur ausgehend)
 
-> ⚠️ **Hinweis für Privatnutzer (outlook.com / hotmail.com / live.com)**: Private Microsoft-Accounts haben keinen Zugang zum Azure Portal. Eine eigene App-Registrierung ist daher ohne Azure-Konto nicht möglich. Es wird eine zentrale App-Registrierung durch den Integration-Maintainer benötigt, bei der „Persönliche Microsoft-Konten" explizit aktiviert sind (→ Offene Frage 11). Features wie Teams-Präsenz und Planner sind für private Accounts **nicht verfügbar** (→ Abschnitte 15.1, 15.2).
+ℹ️ Privatnutzer (outlook.com) müssen eine eigene Azure-App registrieren.
+   Vollständige Schritt-für-Schritt-Anleitung → Abschnitt 16.1
 
 ── Google Calendar ────────────────────────────────────────────
 2. Anzeigename eingeben
-3. OAuth2 Authorization URL wird generiert:
+3. Google Cloud OAuth-Zugangsdaten eingeben:
+   Client-ID:     [________________________________]
+   Client-Secret: [________________________________]
+   → Anleitung zur Google Cloud OAuth-Einrichtung: Abschnitt 16.2
+4. OAuth2 Authorization URL wird generiert:
    → HA öffnet HA-internen Callback-Endpoint auf Port 8123
    → Benutzer öffnet URL im Browser → meldet sich bei Google an → erteilt Berechtigung
    → Nach Redirect: Token automatisch gespeichert
-4. Kalender-Liste → Auswahl → Sync-Richtung
-
-> ⚠️ **Hinweis für Privatnutzer (gmail.com)**: Für die OAuth2-Authentifizierung wird eine Client-ID/Secret benötigt. Private Nutzer müssen entweder ein eigenes Google Cloud-Projekt erstellen und eine OAuth-App registrieren (kostenlos, aber aufwändig), oder es wird eine zentrale App-Registrierung durch den Maintainer bereitgestellt (→ Offene Fragen 11, 15). Nicht verifizierte Apps zeigen dem Nutzer beim Login eine Google-Sicherheitswarnung.
+   ⚠️ Hinweis: Nicht verifizierte Apps zeigen beim Login eine Google-Sicherheitswarnung –
+      dies ist bei eigenen Client-IDs normal und kann weggeklickt werden.
+5. Kalender-Liste → Auswahl → Sync-Richtung
 
 ── Apple iCloud ───────────────────────────────────────────────
 2. Anzeigename eingeben
@@ -1256,7 +1312,7 @@ Meeting endet (Available):
 - Gmail API (Pub/Sub Push) für E-Mail-Trigger
 - Service `atc.send_gmail`: E-Mail senden via Gmail API
 
-> ⚠️ **Hinweis für Privatnutzer**: Die Gmail API erfordert ein Google Cloud-Projekt mit aktiviertem Pub/Sub. Gmail-Scopes gelten bei Google als „restricted" und erfordern für eine zentrale App-Registrierung eine aufwändige App-Verifizierung durch Google (Security Assessment, Datenschutzerklärung, Domain-Bestätigung). Für Privatnutzer mit eigener Client-ID ist die Nutzung möglich, zeigt aber eine Google-Sicherheitswarnung beim Login (→ Offene Frage 15).
+> ⚠️ **Hinweis für Privatnutzer**: Die Gmail API erfordert ein Google Cloud-Projekt mit aktiviertem Pub/Sub. Gmail-Scopes gelten bei Google als „restricted" und erfordern für eine zentrale App-Registrierung eine aufwändige App-Verifizierung durch Google (Security Assessment, Datenschutzerklärung, Domain-Bestätigung). Für Privatnutzer mit eigener Client-ID (Anleitung → Abschnitt 16.2) ist die Nutzung möglich, zeigt aber eine Google-Sicherheitswarnung beim Login – dies ist bei nicht verifizierten Apps normal.
 
 ### 15.6 Apple-Erweiterungen
 
@@ -1284,5 +1340,141 @@ Meeting endet (Available):
 | iCloud Drive | Apple | ⭐ | Sehr hoch | – | – (kein offizielles API) |
 
 (*) Microsoft Outlook: ✅ Privat & Business. Google Gmail: ⚠️ Erfordert Google Cloud-Projekt + Pub/Sub; für zentrale App ggf. App-Verifizierung durch Google notwendig.
+
+---
+
+## 16. OAuth2-Einrichtungsanleitungen (Stand 2026)
+
+> Diese Anleitungen beschreiben den aktuellen Stand der Plattformen (Stand: 2026). Da sich Portale ändern können, wird empfohlen, die offizielle Microsoft- bzw. Google-Dokumentation als Ergänzung zu nutzen.
+
+---
+
+### 16.1 Microsoft Azure App-Registrierung (für Outlook / Microsoft 365)
+
+**Voraussetzung**: Ein Microsoft-Konto (privat: outlook.com / hotmail.com, oder Business: Microsoft 365-Konto mit Admin-Rechten für App-Registrierungen). Privatnutzer mit outlook.com können eine kostenlose App im Azure-Portal registrieren – ein bezahltes Azure-Abonnement ist **nicht** erforderlich.
+
+#### Schritt-für-Schritt-Anleitung
+
+**1. Azure Portal öffnen**
+- Rufe [https://portal.azure.com](https://portal.azure.com) auf und melde dich mit deinem Microsoft-Konto an.
+- Wenn du ein privates Outlook-/Hotmail-Konto verwendest: Melde dich direkt mit diesem an. Das Azure-Portal ist für alle Microsoft-Konten zugänglich (kein Abonnement nötig für kostenlose Registrierungen).
+
+**2. Microsoft Entra ID öffnen**
+- Suche im oberen Suchfeld nach **„Microsoft Entra ID"** (früher: Azure Active Directory) und öffne den Dienst.
+
+**3. App-Registrierungen**
+- Klicke im linken Menü auf **„App-Registrierungen"**.
+- Klicke oben auf **„+ Neue Registrierung"**.
+
+**4. App konfigurieren**
+- **Name**: z.B. `HA Advanced Timer & Calendar`
+- **Unterstützte Kontotypen**: Wähle entsprechend deinem Account-Typ:
+  - Für **Privatnutzer** (outlook.com): **„Persönliche Microsoft-Konten (z.B. Xbox und Skype)"** → wähle die Option „Konten in einem Organisationsverzeichnis (beliebig) und persönliche Microsoft-Konten"
+  - Für **Business-Nutzer** (Microsoft 365 / Azure AD): „Nur Konten in diesem Organisationsverzeichnis" oder die Multi-Tenant-Option
+- **Umleitungs-URI**: Wähle **„Mobile und Desktopanwendungen"** und gib ein: `http://localhost` (für Device Code Flow wird kein Redirect benötigt, aber dieser Wert ist ein sicherer Platzhalter)
+- Klicke auf **„Registrieren"**.
+
+**5. Client-ID kopieren**
+- Nach der Registrierung erscheint die **Übersichtsseite** der App.
+- Kopiere die **„Anwendungs-ID (Client)"** – das ist deine **Client-ID** für ATC.
+
+**6. API-Berechtigungen hinzufügen**
+- Klicke im linken Menü auf **„API-Berechtigungen"** → **„+ Berechtigung hinzufügen"**.
+- Wähle **„Microsoft Graph"** → **„Delegierte Berechtigungen"**.
+- Füge folgende Berechtigungen hinzu:
+  - `Calendars.ReadWrite` – Kalender lesen und schreiben
+  - `offline_access` – Refresh Token (für dauerhaften Zugriff ohne erneutes Login)
+  - `User.Read` – Benutzerprofil lesen (für Anzeigename)
+  - *(Optional für Business)* `Presence.Read` – Teams-Präsenz lesen
+  - *(Optional für Business)* `Tasks.ReadWrite` – Microsoft To Do / Planner
+  - *(Optional)* `Mail.Read`, `Mail.Send` – E-Mail-Trigger und -Versand
+- Klicke auf **„Berechtigungen hinzufügen"**.
+- **Für Privatnutzer**: Administrator-Zustimmung ist **nicht** erforderlich – die delegierten Berechtigungen werden beim ersten Login durch den Nutzer erteilt.
+
+**7. Authentication-Einstellungen (für Device Code Flow)**
+- Klicke im linken Menü auf **„Authentifizierung"**.
+- Scrolle zu **„Erweiterte Einstellungen"** und aktiviere **„Öffentliche Clientflows zulassen"** → Stelle den Toggle auf **„Ja"**.
+- Klicke auf **„Speichern"**.
+
+**8. Kein Client-Secret erforderlich (Device Code Flow)**
+- Für den Device Code Flow (empfohlen für ATC) wird **kein** Client-Secret benötigt.
+- Falls du den Authorization Code Flow verwenden möchtest: Klicke auf **„Zertifikate und Geheimnisse"** → **„+ Neuer geheimer Clientschlüssel"** → kopiere den generierten Wert sofort (er wird nur einmal angezeigt).
+
+**9. Zugangsdaten in ATC eintragen**
+- **Client-ID**: Die kopierte Anwendungs-ID aus Schritt 5
+- **Client-Secret**: Nur bei Authorization Code Flow; bei Device Code Flow leer lassen
+- Starte den Device Code Flow in ATC → öffne `https://microsoft.com/devicelogin` und gib den angezeigten Code ein.
+
+> ℹ️ **Hinweis für Privatnutzer**: Wenn beim ersten Login die Meldung erscheint, dass eine Admin-Zustimmung benötigt wird, dann wurde möglicherweise eine falsche „Unterstützte Kontotypen"-Option gewählt. Stelle sicher, dass persönliche Microsoft-Konten in der App-Registrierung aktiviert sind.
+
+---
+
+### 16.2 Google Cloud OAuth-Einrichtung (für Google Calendar / Gmail)
+
+**Voraussetzung**: Ein Google-Konto (privat: gmail.com, oder Workspace). Ein kostenloses Google-Konto genügt für die Erstellung eines Google Cloud-Projekts.
+
+#### Schritt-für-Schritt-Anleitung
+
+**1. Google Cloud Console öffnen**
+- Rufe [https://console.cloud.google.com](https://console.cloud.google.com) auf und melde dich mit deinem Google-Konto an.
+
+**2. Neues Projekt erstellen**
+- Klicke oben links auf das Projekt-Dropdown (oder **„Projekt auswählen"**).
+- Klicke auf **„Neues Projekt"**.
+- **Projektname**: z.B. `HA Advanced Timer Calendar`
+- Klicke auf **„Erstellen"**.
+- Warte bis das Projekt erstellt ist und wähle es aus.
+
+**3. Google Calendar API aktivieren**
+- Öffne im linken Menü **„APIs und Dienste"** → **„Bibliothek"**.
+- Suche nach **„Google Calendar API"** und klicke darauf.
+- Klicke auf **„Aktivieren"**.
+- *(Optional, für Gmail-E-Mail-Trigger)* Suche und aktiviere auch die **„Gmail API"**.
+
+**4. OAuth-Zustimmungsbildschirm konfigurieren**
+- Öffne **„APIs und Dienste"** → **„OAuth-Zustimmungsbildschirm"**.
+- Wähle **„Extern"** (für persönliche Google-Konten; „Intern" ist nur für Google Workspace-Organisationen).
+- Klicke auf **„Erstellen"**.
+- **App-Name**: z.B. `HA Advanced Timer Calendar`
+- **Nutzersupport-E-Mail**: Deine Gmail-Adresse
+- **Entwicklerkontakt-E-Mail**: Deine Gmail-Adresse
+- Klicke auf **„Speichern und weiter"**.
+
+**5. Scopes konfigurieren**
+- Klicke auf **„Bereiche hinzufügen oder entfernen"**.
+- Füge folgende Scopes hinzu:
+  - `https://www.googleapis.com/auth/calendar` – Kalender lesen und schreiben
+  - `https://www.googleapis.com/auth/calendar.events` – Ereignisse lesen und schreiben
+  - *(Optional, für Gmail)* `https://www.googleapis.com/auth/gmail.readonly`
+- Klicke auf **„Aktualisieren"** und dann **„Speichern und weiter"**.
+
+**6. Test-Nutzer hinzufügen (wichtig für externe, nicht verifizierte Apps)**
+- Klicke auf **„+ Nutzer hinzufügen"**.
+- Gib deine eigene Gmail-Adresse ein.
+- *(Optional)* Füge weitere Adressen hinzu, die die App nutzen sollen.
+- Klicke auf **„Speichern und weiter"**.
+
+> ⚠️ **Hinweis**: Da die App nicht durch Google verifiziert ist, erscheint beim Login eine Sicherheitswarnung: „Diese App wurde von Google nicht verifiziert". Dies ist bei eigenen OAuth-Apps für den Privatgebrauch normal. Klicke auf **„Erweitert"** → **„Weiter zu [App-Name] (unsicher)"**, um fortzufahren. Als Test-Nutzer (Schritt 6) kannst du die App ohne Einschränkungen nutzen.
+
+**7. OAuth-Client-ID erstellen**
+- Öffne **„APIs und Dienste"** → **„Anmeldedaten"**.
+- Klicke auf **„+ Anmeldedaten erstellen"** → **„OAuth-Client-ID"**.
+- **Anwendungstyp**: **„Webanwendung"**
+- **Name**: z.B. `HA ATC Client`
+- **Autorisierte Weiterleitungs-URIs**: Füge hinzu:
+  - `http://localhost:8123/auth/external/callback` (für HA lokalen Zugriff)
+  - `https://<deine-ha-domain>/auth/external/callback` (falls du HA über eine externe Domain erreichst)
+- Klicke auf **„Erstellen"**.
+
+**8. Client-ID und Client-Secret kopieren**
+- Ein Dialogfeld zeigt **Client-ID** und **Clientschlüssel (Client-Secret)** an.
+- Kopiere beide Werte sofort – das Secret wird nur einmal vollständig angezeigt (es kann aber jederzeit neu generiert werden).
+
+**9. Zugangsdaten in ATC eintragen**
+- **Client-ID**: Die kopierte Client-ID aus Schritt 8
+- **Client-Secret**: Der kopierte Clientschlüssel aus Schritt 8
+- Starte den OAuth-Flow in ATC → ein Browser-Fenster öffnet sich für den Google-Login.
+
+> ℹ️ **Hinweis zur App-Verifizierung**: Für den Privatgebrauch (eigene Client-ID, eigene Test-Nutzer) ist keine Verifizierung durch Google erforderlich. Eine Google-Verifizierung wäre nur nötig, wenn die App öffentlich für andere Nutzer bereitgestellt werden soll (→ zentrale App-Registrierung in einer späteren Phase).
 
 ---
