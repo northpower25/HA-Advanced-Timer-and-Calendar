@@ -3,57 +3,246 @@
     "step": {
       "user": {
         "title": "Advanced Timer & Calendar",
-        "description": "Neue Instanz von Advanced Timer & Calendar einrichten",
+        "description": "Neue Instanz von Advanced Timer & Calendar einrichten.",
         "data": {
           "name": "Instanzname"
+        },
+        "data_description": {
+          "name": "Ein eindeutiger Name für diese Integrationsinstanz (z. B. „ATC")."
         }
       },
       "telegram": {
         "title": "Telegram (optional)",
+        "description": "Wählen Sie, wie diese Integration Telegram-Benachrichtigungen versenden soll. Wählen Sie **Keiner** um zu überspringen.",
         "data": {
-          "telegram_mode": "Telegram-Modus",
+          "telegram_mode": "Telegram-Modus"
+        }
+      },
+      "telegram_direct": {
+        "title": "Telegram – Eigener Bot (direkte API)",
+        "description": "Geben Sie die Zugangsdaten Ihres eigenen Telegram-Bots ein.\n\n**Bot-Token erhalten:**\n1. Öffnen Sie Telegram und suchen Sie nach **@BotFather**.\n2. Senden Sie `/newbot` und folgen Sie den Anweisungen.\n3. Kopieren Sie den API-Token (Format: `123456:ABC-DEF…`).\n\n**Chat-ID ermitteln:**\nSchicken Sie **@userinfobot** eine beliebige Nachricht – er antwortet mit Ihrer Chat-ID.",
+        "data": {
           "telegram_bot_token": "Bot-Token",
-          "telegram_chat_id": "Chat-ID",
-          "telegram_notify_service": "HA Notify-Dienst"
+          "telegram_chat_id": "Chat-ID"
+        },
+        "data_description": {
+          "telegram_bot_token": "Token von @BotFather (Format: 123456:ABC-DEF…). Bitte geheim halten.",
+          "telegram_chat_id": "Ihre numerische Telegram-Chat-ID (von @userinfobot, z. B. 123456789 oder -100…)."
+        }
+      },
+      "telegram_ha": {
+        "title": "Telegram – HA telegram_bot Integration",
+        "description": "Dieser Modus nutzt die in Home Assistant bereits konfigurierte **telegram_bot**-Integration.\n\nVoraussetzung: Fügen Sie `telegram_bot:` zu Ihrer `configuration.yaml` hinzu oder richten Sie es über die HA-UI ein, bevor Sie hier fortfahren.\n\nWählen Sie den Notify-Dienst Ihres Bots (oder leer lassen für den Standard) und geben Sie die Chat-ID ein.",
+        "data": {
+          "telegram_notify_service": "Telegram Notify-Dienst",
+          "telegram_chat_id": "Chat-ID"
+        },
+        "data_description": {
+          "telegram_notify_service": "Wählen Sie einen der erkannten HA Notify-Dienste Ihres Telegram-Bots. Falls keine erscheinen, ist die telegram_bot-Integration noch nicht eingerichtet.",
+          "telegram_chat_id": "Ihre numerische Telegram-Chat-ID (von @userinfobot, z. B. 123456789 oder -100…)."
         }
       },
       "voice": {
         "title": "Sprachbenachrichtigungen (optional)",
+        "description": "Wählen Sie einen Sprach-/TTS-Anbieter für gesprochene Ansagen. Wählen Sie **Keiner** um zu überspringen.",
         "data": {
-          "voice_provider": "Sprachanbieter",
-          "voice_media_player": "Mediaplayer-Entität",
-          "voice_volume": "Lautstärke (0.0 - 1.0)",
+          "voice_provider": "Sprachanbieter"
+        }
+      },
+      "voice_config": {
+        "title": "Sprachbenachrichtigungen – Konfiguration",
+        "description": "Wählen Sie den/die Mediaplayer für die Ansagen und stellen Sie die Lautstärke ein. Bei TTS-basierten Anbietern können Sie auch TTS-Engine und Sprache festlegen.",
+        "data": {
+          "voice_media_player": "Mediaplayer-Entität / Entitäten",
+          "voice_volume": "Lautstärke (0,0 – 1,0)",
           "voice_tts_engine": "TTS-Engine",
           "voice_language": "Sprache"
+        },
+        "data_description": {
+          "voice_media_player": "Einen oder mehrere Mediaplayer auswählen. Bei Alexa wird aus der Entitäts-ID automatisch der passende Notify-Dienst abgeleitet.",
+          "voice_volume": "Wiedergabelautstärke. Die ursprüngliche Lautstärke wird nach der Ansage wiederhergestellt.",
+          "voice_tts_engine": "TTS-Dienst (z. B. tts.cloud_say). Leer lassen für den Standard.",
+          "voice_language": "BCP-47-Sprachcode, z. B. de-DE oder en-US. Leer lassen für den Standard der TTS-Engine."
+        }
+      },
+      "calendar_sync": {
+        "title": "Kalender-Synchronisation (optional)",
+        "description": "Termine mit einem externen Kalenderanbieter synchronisieren. Wählen Sie **Keiner** um zu überspringen.\n\nSie benötigen OAuth-Zugangsdaten (Client-ID + Client-Secret) aus der Entwicklerkonsole des jeweiligen Anbieters.",
+        "data": {
+          "calendar_sync_provider": "Kalenderanbieter"
+        }
+      },
+      "calendar_google": {
+        "title": "Google Kalender – Zugangsdaten",
+        "description": "**Google OAuth-Zugangsdaten einrichten:**\n1. Öffnen Sie [console.cloud.google.com](https://console.cloud.google.com).\n2. Projekt erstellen → **Google Calendar API** aktivieren.\n3. Gehen Sie zu *Anmeldedaten* → *Anmeldedaten erstellen* → *OAuth-Client-ID* (Anwendungstyp: **Webanwendung**).\n4. Client-ID und Client-Secret kopieren.",
+        "data": {
+          "google_client_id": "Client-ID",
+          "google_client_secret": "Client-Secret"
+        },
+        "data_description": {
+          "google_client_id": "OAuth 2.0 Client-ID aus der Google Cloud Console.",
+          "google_client_secret": "OAuth 2.0 Client-Secret. Bitte geheim halten."
+        }
+      },
+      "calendar_microsoft": {
+        "title": "Microsoft 365 – Zugangsdaten",
+        "description": "**Azure-App-Zugangsdaten einrichten:**\n1. Öffnen Sie [portal.azure.com](https://portal.azure.com) → Azure Active Directory → App-Registrierungen → Neue Registrierung.\n2. Redirect-URI setzen: `https://<IHRE-HA-URL>/auth/external/callback` (ersetzen Sie `<IHRE-HA-URL>` durch Ihre tatsächliche Home-Assistant-Adresse, z. B. `homeassistant.local:8123` oder Ihre Nabu-Casa-URL).\n3. Unter *Zertifikate & Geheimnisse* ein neues Client-Secret erstellen.\n4. Anwendungs-ID (Client) und Secret-Wert kopieren.",
+        "data": {
+          "ms_client_id": "Anwendungs-ID (Client)",
+          "ms_client_secret": "Client-Secret",
+          "ms_tenant_id": "Mandanten-ID"
+        },
+        "data_description": {
+          "ms_client_id": "Azure Anwendungs-ID (Client).",
+          "ms_client_secret": "Azure Client-Secret-Wert. Bitte geheim halten.",
+          "ms_tenant_id": "Azure-Mandanten-ID oder „common" für mandantenübergreifende Apps (Standard: common)."
         }
       },
       "settings": {
         "title": "Standardeinstellungen",
+        "description": "Allgemeine Standardwerte für diese Integrationsinstanz festlegen.",
         "data": {
           "default_reminder_minutes": "Standard-Erinnerungsvorlaufzeit (Minuten)",
-          "timezone": "Zeitzone (leer lassen für HA-Standard)"
+          "timezone": "Zeitzone"
+        },
+        "data_description": {
+          "default_reminder_minutes": "Wie viele Minuten vor einem Ereignis die Erinnerungsbenachrichtigung gesendet wird (1 – 10080).",
+          "timezone": "IANA-Zeitzonenname (z. B. Europe/Berlin). Leer lassen für die Home-Assistant-Zeitzone."
         }
       }
+    },
+    "error": {
+      "credentials_required": "Client-ID und Client-Secret sind beide erforderlich."
     }
   },
   "options": {
     "step": {
-      "init": {
-        "title": "Advanced Timer & Calendar Optionen",
+      "telegram": {
+        "title": "Telegram",
+        "description": "Telegram-Benachrichtigungsmodus ändern. **Keiner** wählen zum Deaktivieren.",
         "data": {
-          "name": "Instanzname",
-          "telegram_mode": "Telegram-Modus",
+          "telegram_mode": "Telegram-Modus"
+        }
+      },
+      "telegram_direct": {
+        "title": "Telegram – Eigener Bot",
+        "description": "Bot-Token und Chat-ID aktualisieren.\n\nNeues Token benötigt? Schreiben Sie **@BotFather** und senden Sie `/token`.\nChat-ID vergessen? Schreiben Sie **@userinfobot**.",
+        "data": {
           "telegram_bot_token": "Bot-Token",
-          "telegram_chat_id": "Chat-ID",
-          "telegram_notify_service": "HA Notify-Dienst",
-          "voice_provider": "Sprachanbieter",
-          "voice_media_player": "Mediaplayer-Entität",
-          "voice_volume": "Lautstärke",
+          "telegram_chat_id": "Chat-ID"
+        },
+        "data_description": {
+          "telegram_bot_token": "Token von @BotFather (Format: 123456:ABC-DEF…).",
+          "telegram_chat_id": "Ihre numerische Telegram-Chat-ID."
+        }
+      },
+      "telegram_ha": {
+        "title": "Telegram – HA Integration",
+        "description": "Notify-Dienst und Chat-ID für die HA telegram_bot Integration anpassen.",
+        "data": {
+          "telegram_notify_service": "Telegram Notify-Dienst",
+          "telegram_chat_id": "Chat-ID"
+        },
+        "data_description": {
+          "telegram_notify_service": "HA Notify-Dienst des Telegram-Bots.",
+          "telegram_chat_id": "Ihre numerische Telegram-Chat-ID."
+        }
+      },
+      "voice": {
+        "title": "Sprachbenachrichtigungen",
+        "description": "Sprach-/TTS-Anbieter ändern. **Keiner** wählen zum Deaktivieren.",
+        "data": {
+          "voice_provider": "Sprachanbieter"
+        }
+      },
+      "voice_config": {
+        "title": "Sprachbenachrichtigungen – Konfiguration",
+        "description": "Mediaplayer und TTS-Einstellungen aktualisieren.",
+        "data": {
+          "voice_media_player": "Mediaplayer-Entität / Entitäten",
+          "voice_volume": "Lautstärke (0,0 – 1,0)",
           "voice_tts_engine": "TTS-Engine",
-          "voice_language": "Sprache",
+          "voice_language": "Sprache"
+        },
+        "data_description": {
+          "voice_media_player": "Einen oder mehrere Mediaplayer auswählen.",
+          "voice_volume": "Wiedergabelautstärke. Ursprüngliche Lautstärke wird danach wiederhergestellt.",
+          "voice_tts_engine": "TTS-Dienst (z. B. tts.cloud_say).",
+          "voice_language": "BCP-47-Sprachcode, z. B. de-DE oder en-US."
+        }
+      },
+      "calendar_sync": {
+        "title": "Kalender-Synchronisation",
+        "description": "Externen Kalenderanbieter ändern. **Keiner** wählen zum Deaktivieren.",
+        "data": {
+          "calendar_sync_provider": "Kalenderanbieter"
+        }
+      },
+      "calendar_google": {
+        "title": "Google Kalender",
+        "description": "Google OAuth-Zugangsdaten aktualisieren.",
+        "data": {
+          "google_client_id": "Client-ID",
+          "google_client_secret": "Client-Secret"
+        },
+        "data_description": {
+          "google_client_id": "OAuth 2.0 Client-ID aus der Google Cloud Console.",
+          "google_client_secret": "OAuth 2.0 Client-Secret."
+        }
+      },
+      "calendar_microsoft": {
+        "title": "Microsoft 365",
+        "description": "Azure-App-Zugangsdaten aktualisieren.",
+        "data": {
+          "ms_client_id": "Anwendungs-ID (Client)",
+          "ms_client_secret": "Client-Secret",
+          "ms_tenant_id": "Mandanten-ID"
+        },
+        "data_description": {
+          "ms_client_id": "Azure Anwendungs-ID (Client).",
+          "ms_client_secret": "Azure Client-Secret-Wert.",
+          "ms_tenant_id": "Azure-Mandanten-ID oder „common"."
+        }
+      },
+      "settings": {
+        "title": "Standardeinstellungen",
+        "description": "Allgemeine Standardwerte für diese Instanz anpassen.",
+        "data": {
           "default_reminder_minutes": "Standard-Erinnerungsvorlaufzeit (Minuten)",
           "timezone": "Zeitzone"
+        },
+        "data_description": {
+          "default_reminder_minutes": "Minuten vor einem Ereignis für die Erinnerungsbenachrichtigung (1 – 10080).",
+          "timezone": "IANA-Zeitzonenname. Leer lassen für die Home-Assistant-Zeitzone."
         }
+      }
+    },
+    "error": {
+      "credentials_required": "Client-ID und Client-Secret sind beide erforderlich."
+    }
+  },
+  "selector": {
+    "telegram_mode": {
+      "options": {
+        "none": "Keiner – Telegram deaktiviert",
+        "mode_a": "Eigener Bot (direkte API, eigener Token + Chat-ID)",
+        "mode_b": "HA telegram_bot Integration (nutzt bestehende HA-Konfiguration)"
+      }
+    },
+    "voice_provider": {
+      "options": {
+        "none": "Keiner – Sprachbenachrichtigungen deaktiviert",
+        "alexa_media_player": "Alexa Media Player",
+        "google_cast": "Google Cast (Chromecast / Google Home)",
+        "sonos": "Sonos",
+        "generic_tts": "Generisches TTS"
+      }
+    },
+    "calendar_sync_provider": {
+      "options": {
+        "none": "Keiner – kein Kalender-Sync",
+        "google": "Google Kalender",
+        "microsoft": "Microsoft 365 (Outlook)"
       }
     }
   }
