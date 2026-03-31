@@ -2,18 +2,18 @@
   "config": {
     "step": {
       "user": {
-        "title": "Advanced Timer & Calendar",
-        "description": "Set up a new instance of Advanced Timer & Calendar.",
+        "title": "Advanced Timer & Calendar – Setup Wizard",
+        "description": "Welcome! This wizard will guide you through setting up **Advanced Timer & Calendar** in a few simple steps.\n\n**What this integration provides:**\n• ⏱️ Flexible timers with schedules (daily, weekly, cron, sunrise/sunset, …)\n• 📅 Calendar entities for appointments, anniversaries, and timer schedules\n• 🔔 Reminders and to-do list integration\n• 📣 Optional notifications via Telegram and/or voice/TTS\n• 🔄 Optional sync with Google Calendar or Microsoft 365\n\n**Steps in this wizard:**\n1. Instance name ← you are here\n2. Telegram notifications (optional – can be skipped)\n3. Voice / TTS announcements (optional – can be skipped)\n4. External calendar sync (optional – can be skipped)\n5. Default settings\n\nAll optional steps can be skipped by selecting **None**.",
         "data": {
           "name": "Instance name"
         },
         "data_description": {
-          "name": "A unique name for this integration instance (e.g. \"ATC\")."
+          "name": "A unique name for this integration instance (e.g. \"ATC\"). Used as prefix for all entity IDs."
         }
       },
       "telegram": {
-        "title": "Telegram (optional)",
-        "description": "Choose how this integration should send Telegram notifications.\n\n• **None** – No Telegram notifications.\n• **mode_a** – Notification only: sends alerts using your own bot token (direct API).\n• **mode_b** – Notification & Control: uses an existing Home Assistant **telegram_bot** integration, supports bot commands.\n\nSelect **None** to skip.",
+        "title": "Step 2 / 5 – Telegram notifications (optional)",
+        "description": "Choose how this integration should send Telegram notifications. You can skip this step by selecting **Disabled**.\n\n**Options:**\n• **Disabled** – No Telegram notifications.\n• **Direct Bot** – Sends alerts using your own bot token directly. Ideal if you do not have the HA Telegram Bot integration.\n• **HA telegram_bot** – Uses the existing Home Assistant **telegram_bot** integration; also supports bot commands for remote control.\n\nNot sure? Choose **Direct Bot** for a quick start.",
         "data": {
           "telegram_mode": "Telegram mode"
         }
@@ -45,8 +45,8 @@
         }
       },
       "voice": {
-        "title": "Voice notifications (optional)",
-        "description": "Choose a voice / TTS provider for spoken announcements. Select **None** to skip.",
+        "title": "Step 3 / 5 – Voice announcements (optional)",
+        "description": "Choose a voice / TTS provider for spoken timer and reminder announcements. Select **Disabled** to skip this step.",
         "data": {
           "voice_provider": "Voice provider"
         }
@@ -68,8 +68,8 @@
         }
       },
       "calendar_sync": {
-        "title": "Calendar sync (optional)",
-        "description": "Synchronise appointments with an external calendar provider. Select **None** to skip.\n\nYou will need OAuth credentials (Client ID + Client Secret) from the selected provider's developer console.",
+        "title": "Step 4 / 5 – External calendar sync (optional)",
+        "description": "Synchronise appointments with an external calendar provider. Select **None** to skip this step.\n\nYou will need OAuth credentials (Client ID + Client Secret) from the selected provider's developer console.",
         "data": {
           "calendar_sync_provider": "Calendar provider"
         }
@@ -101,8 +101,8 @@
         }
       },
       "settings": {
-        "title": "Default settings",
-        "description": "Almost done! Configure some general defaults for this integration.\n\n**Reminder lead time:** How many minutes before an event the reminder notification is sent. The default of 30 minutes works well for most cases.\n\n**Timezone:** Only needed if you want this integration to use a different timezone than Home Assistant. Leave empty to use the Home Assistant system timezone (recommended).\n\nYou can change these settings at any time via the integration options.",
+        "title": "Step 5 / 5 – Default settings",
+        "description": "Almost done! Configure some general defaults for this integration.\n\n**Reminder lead time:** How many minutes before an event the reminder notification is sent. The default of 30 minutes works well for most cases.\n\n**Timezone:** Only needed if you want this integration to use a different timezone than Home Assistant. Leave empty to use the Home Assistant system timezone (recommended).\n\nAfter saving, the **ATC Dashboard** will appear automatically in your Home Assistant sidebar – no manual import required.\n\nYou can change all these settings at any time via the integration options.",
         "data": {
           "default_reminder_minutes": "Default reminder lead time (minutes)",
           "timezone": "Timezone (optional)"
@@ -120,14 +120,14 @@
   "options": {
     "step": {
       "telegram": {
-        "title": "Telegram",
-        "description": "Change the Telegram notification mode.\n\n• **None** – Disabled.\n• **mode_a** – Notification only (direct Bot API).\n• **mode_b** – Notification & Control (HA telegram_bot integration).\n\nSelect **None** to disable.",
+        "title": "Telegram notifications",
+        "description": "Change the Telegram notification mode.\n\n• **Disabled** – No Telegram.\n• **Direct Bot** – own bot token (notifications only).\n• **HA telegram_bot** – HA telegram_bot integration (notifications and remote control).\n\nSelect **Disabled** to turn off Telegram.",
         "data": {
           "telegram_mode": "Telegram mode"
         }
       },
       "telegram_direct": {
-        "title": "Telegram – Direct Bot",
+        "title": "Direct Bot – update credentials",
         "description": "Update your Telegram bot credentials.\n\nNeed a new token? Message **@BotFather** on Telegram and use `/token`.\nNeed your Chat ID? Message **@userinfobot**.",
         "data": {
           "telegram_bot_token": "Bot Token",
@@ -139,7 +139,7 @@
         }
       },
       "telegram_ha": {
-        "title": "Telegram – HA Integration (mode_b)",
+        "title": "HA telegram_bot Integration – update configuration",
         "description": "Select your Telegram Bot instance and the Chat ID to send notifications to.",
         "data": {
           "telegram_bot_entry_id": "Telegram Bot instance",
@@ -228,14 +228,14 @@
   "selector": {
     "telegram_mode": {
       "options": {
-        "none": "None – Telegram disabled",
-        "mode_a": "mode_a – Notification only (own bot token + Chat ID)",
-        "mode_b": "mode_b – Notification & Control (uses existing HA telegram_bot integration)"
+        "none": "Disabled – no Telegram notifications",
+        "mode_a": "Direct Bot – own bot token (notifications only)",
+        "mode_b": "HA telegram_bot Integration – notifications and remote control"
       }
     },
     "voice_provider": {
       "options": {
-        "none": "None – voice notifications disabled",
+        "none": "Disabled – no voice announcements",
         "alexa_media_player": "Alexa Media Player",
         "google_cast": "Google Cast (Chromecast / Google Home)",
         "sonos": "Sonos",
@@ -244,7 +244,7 @@
     },
     "calendar_sync_provider": {
       "options": {
-        "none": "None – no calendar sync",
+        "none": "None – no external calendar sync",
         "google": "Google Calendar",
         "microsoft": "Microsoft 365 (Outlook)"
       }
