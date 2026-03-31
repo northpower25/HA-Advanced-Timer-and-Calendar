@@ -1,0 +1,13 @@
+{
+  "domain": "advanced_timer_calendar",
+  "name": "Advanced Timer & Calendar",
+  "version": "1.0.0",
+  "documentation": "https://github.com/northpower25/HA-Advanced-Timer-and-Calendar",
+  "issue_tracker": "https://github.com/northpower25/HA-Advanced-Timer-and-Calendar/issues",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@northpower25"],
+  "config_flow": true,
+  "iot_class": "local_push",
+  "homeassistant": "2026.0.0"
+}

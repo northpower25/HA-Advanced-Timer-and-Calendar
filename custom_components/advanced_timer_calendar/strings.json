@@ -1,0 +1,60 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Advanced Timer & Calendar",
+        "description": "Set up a new instance of Advanced Timer & Calendar",
+        "data": {
+          "name": "Instance name"
+        }
+      },
+      "telegram": {
+        "title": "Telegram (optional)",
+        "data": {
+          "telegram_mode": "Telegram mode",
+          "telegram_bot_token": "Bot token",
+          "telegram_chat_id": "Chat ID",
+          "telegram_notify_service": "HA notify service"
+        }
+      },
+      "voice": {
+        "title": "Voice notifications (optional)",
+        "data": {
+          "voice_provider": "Voice provider",
+          "voice_media_player": "Media player entity",
+          "voice_volume": "Volume (0.0 - 1.0)",
+          "voice_tts_engine": "TTS engine",
+          "voice_language": "Language"
+        }
+      },
+      "settings": {
+        "title": "Default settings",
+        "data": {
+          "default_reminder_minutes": "Default reminder before (minutes)",
+          "timezone": "Timezone (leave empty for HA default)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Advanced Timer & Calendar Options",
+        "data": {
+          "name": "Instance name",
+          "telegram_mode": "Telegram mode",
+          "telegram_bot_token": "Bot token",
+          "telegram_chat_id": "Chat ID",
+          "telegram_notify_service": "HA notify service",
+          "voice_provider": "Voice provider",
+          "voice_media_player": "Media player entity",
+          "voice_volume": "Volume",
+          "voice_tts_engine": "TTS engine",
+          "voice_language": "Language",
+          "default_reminder_minutes": "Default reminder before (minutes)",
+          "timezone": "Timezone"
+        }
+      }
+    }
+  }
+}

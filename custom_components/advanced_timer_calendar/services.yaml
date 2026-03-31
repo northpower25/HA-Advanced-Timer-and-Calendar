@@ -1,0 +1,545 @@
+create_timer:
+  name: Create Timer
+  description: Create a new timer with a specified schedule.
+  fields:
+    name:
+      name: Name
+      description: Name of the timer.
+      required: true
+      example: "Morning Lights"
+      selector:
+        text:
+    enabled:
+      name: Enabled
+      description: Whether the timer is active.
+      default: true
+      selector:
+        boolean:
+    schedule_type:
+      name: Schedule Type
+      description: "Type of schedule: once, daily, weekdays, interval, yearly, cron, sun."
+      default: once
+      selector:
+        select:
+          options:
+            - once
+            - daily
+            - weekdays
+            - interval
+            - yearly
+            - cron
+            - sun
+    time:
+      name: Time
+      description: "Time of day in HH:MM format (for daily, weekdays, yearly)."
+      example: "08:00"
+      selector:
+        text:
+    weekdays:
+      name: Weekdays
+      description: "List of weekday numbers (0=Mon, 6=Sun) for weekdays schedule."
+      example: "[0, 1, 2, 3, 4]"
+      selector:
+        object:
+    datetime:
+      name: DateTime
+      description: "ISO datetime string for once schedule."
+      example: "2026-01-01T08:00:00"
+      selector:
+        text:
+    interval:
+      name: Interval
+      description: Interval value for interval schedule.
+      example: 7
+      selector:
+        number:
+          min: 1
+          max: 3650
+    interval_unit:
+      name: Interval Unit
+      description: "Unit for interval: days, weeks, months."
+      default: days
+      selector:
+        select:
+          options:
+            - days
+            - weeks
+            - months
+    month:
+      name: Month
+      description: Month for yearly schedule (1-12).
+      selector:
+        number:
+          min: 1
+          max: 12
+    day:
+      name: Day
+      description: Day of month for yearly schedule (1-31).
+      selector:
+        number:
+          min: 1
+          max: 31
+    cron:
+      name: Cron Expression
+      description: "Cron expression (min hour dom month dow)."
+      example: "0 8 * * 1-5"
+      selector:
+        text:
+    sun_event:
+      name: Sun Event
+      description: "sunrise or sunset for sun-based schedule."
+      default: sunrise
+      selector:
+        select:
+          options:
+            - sunrise
+            - sunset
+    sun_offset_minutes:
+      name: Sun Offset Minutes
+      description: Offset in minutes relative to sun event (can be negative).
+      default: 0
+      selector:
+        number:
+          min: -240
+          max: 240
+    actions:
+      name: Actions
+      description: List of actions to execute when the timer fires.
+      selector:
+        object:
+    conditions:
+      name: Conditions
+      description: List of conditions that must be met for the timer to fire.
+      selector:
+        object:
+    notifications:
+      name: Notifications
+      description: Notification configuration for timer events.
+      selector:
+        object:
+
+update_timer:
+  name: Update Timer
+  description: Update an existing timer's configuration.
+  fields:
+    timer_id:
+      name: Timer ID
+      description: ID of the timer to update.
+      required: true
+      selector:
+        text:
+    name:
+      name: Name
+      description: New name for the timer.
+      selector:
+        text:
+    enabled:
+      name: Enabled
+      description: Enable or disable the timer.
+      selector:
+        boolean:
+    schedule_type:
+      name: Schedule Type
+      description: New schedule type.
+      selector:
+        select:
+          options:
+            - once
+            - daily
+            - weekdays
+            - interval
+            - yearly
+            - cron
+            - sun
+    time:
+      name: Time
+      description: New time in HH:MM format.
+      selector:
+        text:
+    weekdays:
+      name: Weekdays
+      description: New list of weekday numbers.
+      selector:
+        object:
+    datetime:
+      name: DateTime
+      description: New ISO datetime string.
+      selector:
+        text:
+    interval:
+      name: Interval
+      description: New interval value.
+      selector:
+        number:
+          min: 1
+          max: 3650
+    interval_unit:
+      name: Interval Unit
+      description: New interval unit.
+      selector:
+        select:
+          options:
+            - days
+            - weeks
+            - months
+    actions:
+      name: Actions
+      description: New list of actions.
+      selector:
+        object:
+    conditions:
+      name: Conditions
+      description: New list of conditions.
+      selector:
+        object:
+    notifications:
+      name: Notifications
+      description: New notification configuration.
+      selector:
+        object:
+
+delete_timer:
+  name: Delete Timer
+  description: Delete an existing timer permanently.
+  fields:
+    timer_id:
+      name: Timer ID
+      description: ID of the timer to delete.
+      required: true
+      selector:
+        text:
+
+enable_timer:
+  name: Enable Timer
+  description: Enable a timer so it runs on its schedule.
+  fields:
+    timer_id:
+      name: Timer ID
+      description: ID of the timer to enable.
+      required: true
+      selector:
+        text:
+
+disable_timer:
+  name: Disable Timer
+  description: Disable a timer so it no longer runs.
+  fields:
+    timer_id:
+      name: Timer ID
+      description: ID of the timer to disable.
+      required: true
+      selector:
+        text:
+
+pause_timer:
+  name: Pause Timer
+  description: Pause a running timer.
+  fields:
+    timer_id:
+      name: Timer ID
+      description: ID of the timer to pause.
+      required: true
+      selector:
+        text:
+
+skip_next:
+  name: Skip Next Run
+  description: Skip the next scheduled run of a timer.
+  fields:
+    timer_id:
+      name: Timer ID
+      description: ID of the timer to skip.
+      required: true
+      selector:
+        text:
+
+run_now:
+  name: Run Now
+  description: Immediately trigger a timer's actions.
+  fields:
+    timer_id:
+      name: Timer ID
+      description: ID of the timer to run immediately.
+      required: true
+      selector:
+        text:
+
+create_reminder:
+  name: Create Reminder
+  description: Create a new reminder, todo, anniversary, or appointment.
+  fields:
+    name:
+      name: Name
+      description: Name of the reminder.
+      required: true
+      selector:
+        text:
+    type:
+      name: Type
+      description: "Type: reminder, todo, anniversary, appointment."
+      default: reminder
+      selector:
+        select:
+          options:
+            - reminder
+            - todo
+            - anniversary
+            - appointment
+    datetime:
+      name: DateTime
+      description: ISO datetime string for the reminder.
+      selector:
+        text:
+    date:
+      name: Date
+      description: Date string for the reminder.
+      selector:
+        text:
+    due_date:
+      name: Due Date
+      description: Due date for todo items.
+      selector:
+        text:
+    description:
+      name: Description
+      description: Optional description or notes.
+      selector:
+        text:
+    completed:
+      name: Completed
+      description: Whether the todo is already completed.
+      default: false
+      selector:
+        boolean:
+    notifications:
+      name: Notifications
+      description: Notification configuration.
+      selector:
+        object:
+
+complete_todo:
+  name: Complete Todo
+  description: Mark a todo reminder as completed.
+  fields:
+    reminder_id:
+      name: Reminder ID
+      description: ID of the todo reminder to complete.
+      required: true
+      selector:
+        text:
+
+sync_calendar:
+  name: Sync Calendar
+  description: Trigger a sync with external calendar accounts.
+  fields:
+    account_id:
+      name: Account ID
+      description: ID of the account to sync (leave empty to sync all).
+      selector:
+        text:
+
+add_calendar_account:
+  name: Add Calendar Account
+  description: Add a new external calendar account (Microsoft, Google, Apple).
+  fields:
+    name:
+      name: Name
+      description: Display name for this account.
+      required: true
+      selector:
+        text:
+    provider:
+      name: Provider
+      description: "Calendar provider: microsoft, google, apple."
+      required: true
+      selector:
+        select:
+          options:
+            - microsoft
+            - google
+            - apple
+    sync_direction:
+      name: Sync Direction
+      description: "Direction of sync: bidirectional, inbound, outbound."
+      default: bidirectional
+      selector:
+        select:
+          options:
+            - bidirectional
+            - inbound
+            - outbound
+    conflict_strategy:
+      name: Conflict Strategy
+      description: "How to resolve conflicts: ha_wins, remote_wins, newest_wins, manual."
+      default: newest_wins
+      selector:
+        select:
+          options:
+            - ha_wins
+            - remote_wins
+            - newest_wins
+            - manual
+    client_id:
+      name: Client ID
+      description: OAuth client ID for Microsoft or Google.
+      selector:
+        text:
+    client_secret:
+      name: Client Secret
+      description: OAuth client secret.
+      selector:
+        text:
+    tenant_id:
+      name: Tenant ID
+      description: Azure tenant ID for Microsoft accounts.
+      selector:
+        text:
+    username:
+      name: Username
+      description: Username for Apple/CalDAV authentication.
+      selector:
+        text:
+    password:
+      name: Password
+      description: Password or app-specific password for Apple/CalDAV.
+      selector:
+        text:
+    caldav_url:
+      name: CalDAV URL
+      description: CalDAV server URL for Apple or generic CalDAV.
+      selector:
+        text:
+
+remove_calendar_account:
+  name: Remove Calendar Account
+  description: Remove an external calendar account.
+  fields:
+    account_id:
+      name: Account ID
+      description: ID of the account to remove.
+      required: true
+      selector:
+        text:
+
+create_external_event:
+  name: Create External Event
+  description: Create a new event in an external calendar.
+  fields:
+    account_id:
+      name: Account ID
+      description: ID of the calendar account.
+      required: true
+      selector:
+        text:
+    calendar_id:
+      name: Calendar ID
+      description: ID of the target calendar.
+      required: true
+      selector:
+        text:
+    summary:
+      name: Summary
+      description: Title/summary of the event.
+      required: true
+      selector:
+        text:
+    description:
+      name: Description
+      description: Event description.
+      selector:
+        text:
+    start:
+      name: Start
+      description: ISO datetime string for event start.
+      selector:
+        text:
+    end:
+      name: End
+      description: ISO datetime string for event end.
+      selector:
+        text:
+    location:
+      name: Location
+      description: Event location.
+      selector:
+        text:
+    all_day:
+      name: All Day
+      description: Whether this is an all-day event.
+      default: false
+      selector:
+        boolean:
+
+delete_external_event:
+  name: Delete External Event
+  description: Delete an event from an external calendar.
+  fields:
+    account_id:
+      name: Account ID
+      description: ID of the calendar account.
+      required: true
+      selector:
+        text:
+    calendar_id:
+      name: Calendar ID
+      description: ID of the calendar containing the event.
+      required: true
+      selector:
+        text:
+    event_id:
+      name: Event ID
+      description: ID of the event to delete.
+      required: true
+      selector:
+        text:
+
+create_calendar_trigger:
+  name: Create Calendar Trigger
+  description: Create an automation trigger based on external calendar events.
+  fields:
+    name:
+      name: Name
+      description: Name of the trigger.
+      required: true
+      selector:
+        text:
+    account_id:
+      name: Account ID
+      description: ID of the calendar account to monitor.
+      required: true
+      selector:
+        text:
+    calendar_id:
+      name: Calendar ID
+      description: Specific calendar to monitor (optional).
+      selector:
+        text:
+    keyword_filter:
+      name: Keyword Filter
+      description: Only trigger on events containing this keyword in the title.
+      selector:
+        text:
+    offset_minutes:
+      name: Offset Minutes
+      description: Trigger this many minutes before the event (can be negative for after).
+      default: 0
+      selector:
+        number:
+          min: -1440
+          max: 1440
+    actions:
+      name: Actions
+      description: Actions to execute when the trigger fires.
+      selector:
+        object:
+
+delete_calendar_trigger:
+  name: Delete Calendar Trigger
+  description: Delete an existing calendar trigger.
+  fields:
+    trigger_id:
+      name: Trigger ID
+      description: ID of the trigger to delete.
+      required: true
+      selector:
+        text:
