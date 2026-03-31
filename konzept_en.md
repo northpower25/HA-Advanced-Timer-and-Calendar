@@ -7,6 +7,7 @@ A custom component for Home Assistant covering the following core areas:
 - **Timer / Scheduler**: Control entities (switches, lights, etc.) on a schedule
 - **Reminder / Calendar**: Reminders, appointments, anniversaries, to-dos
 - **Telegram Integration**: Notifications and bidirectional bot control (interactive when HA Telegram Bot is present)
+- **Voice Notifications**: Spoken timer and reminder notifications via Alexa Media Player, Google Home/Cast, Sonos, or any HA TTS-compatible media player – with predefined and freely configurable voice message templates
 - **Bidirectional Calendar Integration**: Full synchronisation with Microsoft 365/Outlook, Google Calendar and Apple iCloud Calendar – for multiple persons/accounts simultaneously
 - **Persistence**: All data survives HA restarts
 - **User-Friendliness**: Full configuration via the HA UI (Config Flow + Options Flow)
@@ -39,6 +40,8 @@ custom_components/advanced_timer_calendar/
 ├── services.py              # Service handlers
 ├── telegram_bot.py          # Telegram notification & control module
 │                            # (interactive/bidirectional via HA telegram_bot)
+├── voice_notifications.py   # Voice notification module
+│                            # (Alexa Media Player, Google Home/Cast, Sonos, HA TTS)
 ├── external_calendars/
 │   ├── __init__.py          # Package init, provider registry
 │   ├── base.py              # Abstract base class CalendarProvider
@@ -275,8 +278,9 @@ One or more notification channels can be independently enabled per timer/appoint
 | **Telegram (Mode A)** | Directly via Bot Token – outbound messages only |
 | **Telegram (Mode B)** | Via HA `telegram_bot` – bidirectional & interactive with inline keyboards |
 | **HA Notify** | Any HA notification service (e.g. `notify.mobile_app_phone`, `notify.pushover`, email notify, etc.) |
+| **Voice Notification** | Spoken announcements on Alexa, Google Home/Cast, Sonos, or other HA TTS-capable devices |
 
-Channels can be combined, e.g. Telegram **and** HA Notify simultaneously for the same timer.
+Channels can be combined, e.g. Telegram **and** HA Notify **and** Voice Notification simultaneously for the same timer.
 
 ### 5.1 Operating Modes (Telegram)
 
@@ -301,8 +305,16 @@ For each timer/appointment up to **three notification points** can be independen
 
 ```json
 {
-  "channels": ["telegram", "ha_notify"],
+  "channels": ["telegram", "ha_notify", "voice"],
   "ha_notify_service": "notify.mobile_app_iphone",
+  "voice": {
+    "enabled": true,
+    "provider": "alexa_media_player",
+    "media_player_entity": "media_player.echo_dot_kitchen",
+    "volume": 0.6,
+    "tts_engine": null,
+    "language": "en-US"
+  },
   "notify_before": {
     "enabled": true,
     "value": 30,
@@ -318,7 +330,11 @@ For each timer/appointment up to **three notification points** can be independen
     "before": "⏰ {{ name }} starts in {{ time_until }}.",
     "after": "✅ {{ name }} has started.",
     "reset": "🔄 {{ name }} has completed and been reset.",
-    "skipped": "⏭ {{ name }} was skipped ({{ reason }})."
+    "skipped": "⏭ {{ name }} was skipped ({{ reason }}).",
+    "voice_before": "{{ name }} starts in {{ time_until }}.",
+    "voice_after": "{{ name }} has started.",
+    "voice_reset": "{{ name }} has completed.",
+    "voice_skipped": "{{ name }} was skipped."
   }
 }
 ```
@@ -386,7 +402,173 @@ Security: Whitelist of chat IDs allowed to send commands.
 
 ---
 
-## 6. HA Entities of the Integration
+## 5.5 Voice Notifications
+
+ATC supports spoken announcements of timer and reminder notifications on smart speakers and other audio devices. Voice notification is a standalone, combinable channel (in addition to Telegram and HA Notify).
+
+### Supported Integrations & Requirements
+
+#### 🔔 Alexa Media Player (recommended for Amazon Echo devices)
+
+> ⚠️ **Installation required**: The [Alexa Media Player](https://github.com/alandtse/alexa_media_player) integration must be installed separately via **HACS**. It is **not** part of Home Assistant Core.
+> Installation link: **https://github.com/alandtse/alexa_media_player**
+
+- Supported devices: Amazon Echo, Echo Dot, Echo Show, Echo Studio, Fire TV (with Alexa)
+- How it works: ATC calls the notify service `notify.alexa_media_<device_name>` and sends the message text as `announce` type
+- The message is spoken aloud on the selected Alexa device without permanently interrupting the current media
+- Also supports groups (address multiple Echo devices simultaneously)
+- Volume: controllable via the `data` field of the notify service payload
+
+**Example service call (generated internally by ATC):**
+```yaml
+service: notify.alexa_media_echo_dot_kitchen
+data:
+  message: "Irrigation Zone 1 starts in 5 minutes."
+  data:
+    type: announce
+    method: all
+```
+
+**Prerequisites:**
+1. Install Alexa Media Player via HACS: https://github.com/alandtse/alexa_media_player
+2. Sign in with your Amazon account in the Alexa Media Player integration
+3. Echo devices are automatically discovered as `media_player.echo_*` entities
+
+---
+
+#### 🏠 Google Home / Google Cast (native in HA)
+
+> ✅ **No additional installation needed** – The Google Cast integration is part of Home Assistant Core.
+
+- Supported devices: Google Home, Google Home Mini/Nest Mini, Nest Hub, Nest Hub Max, Chromecast Audio, any Google Cast-capable device
+- How it works: ATC uses HA's built-in `tts.speak` service with a Google Cast `media_player`
+- TTS engine: Configurable (default: `tts.google_translate_say` or `tts.cloud_say` via HA Cloud)
+
+**Example service call:**
+```yaml
+service: tts.speak
+data:
+  media_player_entity_id: media_player.google_home_living_room
+  message: "Irrigation Zone 1 starts in 5 minutes."
+  options:
+    voice: en-US-Standard-A
+```
+
+---
+
+#### 🎵 Sonos (native in HA)
+
+> ✅ **No additional installation needed** – The Sonos integration is part of Home Assistant Core.
+
+- Supported devices: All Sonos speakers (Era, Move, Roam, One, Five, Arc, Beam, Ray, etc.)
+- How it works: `tts.speak` service with a Sonos `media_player`
+- TTS engine: Configurable (Piper/local, HA Cloud TTS, Google Translate TTS)
+- Supports volume control before/after announcement and restoring the previous playback state
+
+---
+
+#### 🔊 HA TTS + Any Media Player (generic)
+
+> ✅ **No additional installation needed** – Works with any `media_player` entity integrated into HA.
+
+- How it works: ATC uses the `tts.speak` service with the media player entity and TTS engine selected in the Config Flow
+- Compatible with: VLC Media Player, ESPHome Speaker, Squeezebox/Logitech Media Server, Kodi, and all other HA `media_player` entities
+- **Available TTS engines (selection):**
+
+| TTS Engine | Type | Requirement | Quality |
+|-----------|------|-------------|---------|
+| **Piper** (local) | Local | Wyoming protocol / add-on | ⭐⭐⭐⭐ – Offline, private, free |
+| **HA Cloud TTS** | Cloud | Nabu Casa subscription | ⭐⭐⭐⭐⭐ – Very natural (Azure Neural) |
+| **Google Translate TTS** | Cloud | None (free) | ⭐⭐⭐ – Simple, no configuration needed |
+| **Microsoft Azure TTS** | Cloud | Azure account + API key | ⭐⭐⭐⭐⭐ – Very natural |
+| **Amazon Polly** | Cloud | AWS account + API key | ⭐⭐⭐⭐ – Natural |
+| **ElevenLabs** | Cloud | API key (paid) | ⭐⭐⭐⭐⭐ – Very natural |
+
+---
+
+### Configuration in the Config Flow (Step: Voice Notifications)
+
+Voice notification is offered as an optional step in the ATC Config Flow:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Voice Notifications (optional)                                 │
+│                                                                 │
+│  Integration / Provider:                                        │
+│  ○ Alexa Media Player ⚠️ HACS installation required            │
+│  ○ Google Home / Google Cast                                    │
+│  ○ Sonos                                                        │
+│  ○ HA TTS + Media Player (generic)                             │
+│  ○ No voice channel                                             │
+│                                                                 │
+│  [For Alexa Media Player:]                                      │
+│  Media player entity:   [media_player.echo_dot_kitchen ▾]      │
+│  Volume:                [████░░░░░░] 60%                        │
+│  Announce mode:         ○ announce  ○ tts                       │
+│                                                                 │
+│  [For Google / Sonos / generic:]                                │
+│  Media player entity:   [media_player.google_home_living ▾]    │
+│  TTS engine:            [tts.cloud_say ▾]                       │
+│  Language:              [en-US ▾]                               │
+│  Volume:                [████░░░░░░] 60%                        │
+│                                                                 │
+│  Default voice templates: (editable)                            │
+│  Before:      "{{ name }} starts in {{ time_until }}."          │
+│  After:       "{{ name }} has started."                         │
+│  Completion:  "{{ name }} has completed."                       │
+│  Reminder:    "Reminder: {{ title }} in {{ time_until }}."      │
+│                                                                 │
+│  [Play test announcement]    [Continue]                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+> ⚠️ **Note on Alexa Media Player**: To use this feature, the [Alexa Media Player](https://github.com/alandtse/alexa_media_player) integration must be installed and configured via HACS. Without this integration, Alexa devices will not appear as selectable entities.
+
+---
+
+### Predefined Voice Text Templates
+
+Separate, TTS-optimised voice text templates exist for each notification timing point (no emojis, shorter than written text messages):
+
+| Timing | Predefined voice text |
+|--------|----------------------|
+| Before | `{{ name }} starts in {{ time_until }}.` |
+| After activation | `{{ name }} has started. Duration: {{ duration }} minutes.` |
+| Completion/reset | `{{ name }} has completed.` |
+| Skipped | `{{ name }} was skipped. Reason: {{ reason }}.` |
+| Reminder | `Reminder: {{ title }} in {{ time_until }}.` |
+| Error/disabled | `Timer {{ name }} is disabled or has an error.` |
+
+Templates can be individually customised per timer/appointment. Template variables are identical to those for written notifications: `{{ name }}`, `{{ time_until }}`, `{{ duration }}`, `{{ reason }}`, `{{ title }}`, `{{ next_run }}`.
+
+---
+
+### Data Model: Voice Configuration (`voice`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | bool | Voice channel active/inactive |
+| `provider` | string | `alexa_media_player`, `google_cast`, `sonos`, `generic_tts` |
+| `media_player_entity` | string | HA entity ID of the target device (e.g. `media_player.echo_dot_kitchen`) |
+| `media_player_entities` | list[str] | Optional: multiple simultaneous devices (group) |
+| `volume` | float | Volume 0.0–1.0 (default: 0.5) |
+| `restore_volume` | bool | Restore volume after announcement (default: `true`) |
+| `tts_engine` | string\|None | TTS service (e.g. `tts.cloud_say`, `tts.piper`); for Alexa: `null` |
+| `language` | string\|None | Language code (e.g. `en-US`, `de-DE`); for Alexa: `null` |
+| `announce_mode` | string | Alexa-specific: `announce` (briefly interrupts) or `tts` (waits for completion) |
+
+---
+
+### Overview: Voice Notification Integrations
+
+| Integration | Device types | Installation | Requires TTS engine | Recommendation |
+|-------------|-------------|-------------|---------------------|----------------|
+| **Alexa Media Player** | Amazon Echo, Echo Dot, Echo Show, Echo Studio | ⚠️ HACS ([Link](https://github.com/alandtse/alexa_media_player)) | No (Alexa built-in) | ⭐⭐⭐⭐⭐ Best solution for Alexa users |
+| **Google Home / Cast** | Google Home, Nest Mini/Hub, Chromecast Audio | ✅ HA Core | Yes (e.g. `tts.cloud_say`) | ⭐⭐⭐⭐⭐ Best solution for Google users |
+| **Sonos** | All Sonos speakers | ✅ HA Core | Yes | ⭐⭐⭐⭐ Great for Sonos users |
+| **HA TTS + Media Player** | Any (VLC, ESPHome, Kodi…) | ✅ HA Core | Yes | ⭐⭐⭐ Universal |
+
+---
 
 | Entity | Type | Description |
 |--------|------|-------------|
@@ -431,6 +613,14 @@ Security: Whitelist of chat IDs allowed to send commands.
 - Mode: "No Telegram", "Own Bot", "HA Telegram Bot"
 - For "Own Bot": Bot Token, Chat ID, send test message
 - For "HA Telegram Bot": Select existing notification service
+
+### Step 2b – Voice Notifications (optional)
+- Select integration: "No voice channel", "Alexa Media Player", "Google Home / Cast", "Sonos", "HA TTS + Media Player (generic)"
+- **Alexa Media Player**: Select `media_player.echo_*` entity, volume (0–100 %), announce mode (`announce` / `tts`)
+  > ⚠️ Note: Alexa Media Player must be installed via HACS → https://github.com/alandtse/alexa_media_player
+- **Google Home / Cast, Sonos, generic**: Select `media_player.*` entity, TTS engine (from available HA TTS services), language, volume
+- Edit default voice text templates (before, after, completion, reminder)
+- Test announcement: "Play test announcement" sends a sample message immediately to the selected device
 
 ### Step 3 – External Calendar Accounts (optional, repeatable)
 - Select provider: Microsoft 365 / Outlook, Google Calendar, Apple iCloud Calendar
@@ -642,6 +832,13 @@ mode: single
 - Telegram Mode A (standalone, outbound only)
 - Telegram Mode B (HA integration, bidirectional & interactive via inline keyboards)
 - **HA Notify** as notification channel (in addition to Telegram, combinable)
+- **Voice Notifications**:
+  - Alexa Media Player (HACS, https://github.com/alandtse/alexa_media_player)
+  - Google Home / Google Cast (native)
+  - Sonos (native)
+  - HA TTS + generic media player
+  - Predefined & configurable voice text templates (TTS-optimised, no emojis)
+  - Volume control, device selection, group announcements
 - **Structured notification timing** (before, after, on completion/reset) with units minutes/hours/days/weeks
 - **Customisable notification text templates** with proposed defaults (per timer/appointment)
 - Reminder/calendar types (anniversaries, to-dos)
