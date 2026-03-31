@@ -1478,3 +1478,60 @@ Meeting endet (Available):
 > ℹ️ **Hinweis zur App-Verifizierung**: Für den Privatgebrauch (eigene Client-ID, eigene Test-Nutzer) ist keine Verifizierung durch Google erforderlich. Eine Google-Verifizierung wäre nur nötig, wenn die App öffentlich für andere Nutzer bereitgestellt werden soll (→ zentrale App-Registrierung in einer späteren Phase).
 
 ---
+
+## 17. Umsetzungs-ToDo-Liste
+
+> ✅ = umgesetzt, 🔄 = in Arbeit, ❌ = noch nicht umgesetzt
+
+### Phase 1 – Kern (MVP)
+- ✅ `hacs.json`
+- ✅ `custom_components/advanced_timer_calendar/manifest.json`
+- ✅ `custom_components/advanced_timer_calendar/const.py`
+- ✅ `custom_components/advanced_timer_calendar/__init__.py`
+- ✅ `custom_components/advanced_timer_calendar/coordinator.py`
+- ✅ `custom_components/advanced_timer_calendar/storage.py`
+- ✅ `custom_components/advanced_timer_calendar/scheduler.py`
+- ✅ `custom_components/advanced_timer_calendar/config_flow.py`
+- ✅ `custom_components/advanced_timer_calendar/options_flow.py`
+- ✅ `custom_components/advanced_timer_calendar/switch.py`
+- ✅ `custom_components/advanced_timer_calendar/sensor.py`
+- ✅ `custom_components/advanced_timer_calendar/calendar.py`
+- ✅ `custom_components/advanced_timer_calendar/services.yaml`
+- ✅ `custom_components/advanced_timer_calendar/services.py`
+- ✅ `custom_components/advanced_timer_calendar/strings.json`
+- ✅ `custom_components/advanced_timer_calendar/translations/de.json`
+- ✅ `custom_components/advanced_timer_calendar/translations/en.json`
+- ✅ `www/atc-timer-card.js`
+- ✅ `www/atc-reminder-card.js`
+- ✅ `www/atc-status-card.js`
+- ✅ `dashboard/atc_dashboard.yaml`
+
+### Phase 2 – Benachrichtigungen, Telegram & Reminder
+- ✅ `custom_components/advanced_timer_calendar/notifications.py`
+- ✅ `custom_components/advanced_timer_calendar/telegram_bot.py`
+- ✅ `custom_components/advanced_timer_calendar/voice_notifications.py`
+- ✅ `custom_components/advanced_timer_calendar/todo.py`
+- ✅ Sunrise/Sunset-Trigger in `scheduler.py`
+- ✅ Cron-Schedule-Typ
+
+### Phase 3 – Externe Kalenderanbindung
+- ✅ `custom_components/advanced_timer_calendar/external_calendars/__init__.py`
+- ✅ `custom_components/advanced_timer_calendar/external_calendars/base.py`
+- ✅ `custom_components/advanced_timer_calendar/external_calendars/oauth_handler.py`
+- ✅ `custom_components/advanced_timer_calendar/external_calendars/microsoft.py`
+- ✅ `custom_components/advanced_timer_calendar/external_calendars/google.py`
+- ✅ `custom_components/advanced_timer_calendar/external_calendars/apple.py`
+- ✅ `custom_components/advanced_timer_calendar/external_calendars/sync_engine.py`
+- ✅ `custom_components/advanced_timer_calendar/external_calendars/trigger_processor.py`
+
+### Phase 4 – Komfort & Erweiterungen
+- ✅ `custom_components/advanced_timer_calendar/smart_watering.py`
+- ✅ `custom_components/advanced_timer_calendar/timer_templates.py`
+- ✅ `custom_components/advanced_timer_calendar/import_export.py`
+- ✅ `custom_components/advanced_timer_calendar/statistics.py`
+- ✅ `custom_components/advanced_timer_calendar/notification_escalation.py`
+
+### Dokumentation
+- ✅ `docs/user_guide.md`
+- ✅ `docs/user_guide_de.md`
+- ✅ `docs/developer_guide.md`

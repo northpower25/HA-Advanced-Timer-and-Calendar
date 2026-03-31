@@ -1,0 +1,27 @@
+title: ATC Dashboard
+views:
+  - title: Timers
+    path: timers
+    cards:
+      - type: custom:atc-timer-card
+        title: All Timers
+  - title: Calendar
+    path: calendar
+    cards:
+      - type: calendar
+        entities:
+          - calendar.atc_appointments
+          - calendar.atc_anniversaries
+          - calendar.atc_timer_schedule
+  - title: Reminders & Todos
+    path: reminders
+    cards:
+      - type: custom:atc-reminder-card
+        title: Upcoming Reminders
+      - type: todo-list
+        entity: todo.atc_todos
+  - title: Status
+    path: status
+    cards:
+      - type: custom:atc-status-card
+        title: ATC System Status

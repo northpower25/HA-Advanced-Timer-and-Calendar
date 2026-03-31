@@ -1,0 +1,11 @@
+{
+  "name": "HA Advanced Timer & Calendar",
+  "content_in_root": false,
+  "render_readme": true,
+  "homeassistant": "2026.0.0",
+  "frontend_javascript_modules": [
+    "www/atc-timer-card.js",
+    "www/atc-reminder-card.js",
+    "www/atc-status-card.js"
+  ]
+}

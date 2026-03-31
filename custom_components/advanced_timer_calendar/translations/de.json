@@ -1,0 +1,60 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Advanced Timer & Calendar",
+        "description": "Neue Instanz von Advanced Timer & Calendar einrichten",
+        "data": {
+          "name": "Instanzname"
+        }
+      },
+      "telegram": {
+        "title": "Telegram (optional)",
+        "data": {
+          "telegram_mode": "Telegram-Modus",
+          "telegram_bot_token": "Bot-Token",
+          "telegram_chat_id": "Chat-ID",
+          "telegram_notify_service": "HA Notify-Dienst"
+        }
+      },
+      "voice": {
+        "title": "Sprachbenachrichtigungen (optional)",
+        "data": {
+          "voice_provider": "Sprachanbieter",
+          "voice_media_player": "Mediaplayer-Entität",
+          "voice_volume": "Lautstärke (0.0 - 1.0)",
+          "voice_tts_engine": "TTS-Engine",
+          "voice_language": "Sprache"
+        }
+      },
+      "settings": {
+        "title": "Standardeinstellungen",
+        "data": {
+          "default_reminder_minutes": "Standard-Erinnerungsvorlaufzeit (Minuten)",
+          "timezone": "Zeitzone (leer lassen für HA-Standard)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Advanced Timer & Calendar Optionen",
+        "data": {
+          "name": "Instanzname",
+          "telegram_mode": "Telegram-Modus",
+          "telegram_bot_token": "Bot-Token",
+          "telegram_chat_id": "Chat-ID",
+          "telegram_notify_service": "HA Notify-Dienst",
+          "voice_provider": "Sprachanbieter",
+          "voice_media_player": "Mediaplayer-Entität",
+          "voice_volume": "Lautstärke",
+          "voice_tts_engine": "TTS-Engine",
+          "voice_language": "Sprache",
+          "default_reminder_minutes": "Standard-Erinnerungsvorlaufzeit (Minuten)",
+          "timezone": "Zeitzone"
+        }
+      }
+    }
+  }
+}
