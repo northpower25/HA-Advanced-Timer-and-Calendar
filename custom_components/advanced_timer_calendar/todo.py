@@ -52,7 +52,7 @@ class ATCTodoListEntity(CoordinatorEntity, TodoListEntity):
             if reminder.get("type") != ReminderType.TODO:
                 continue
             status = (
-                TodoItemStatus.COMPLETE
+                TodoItemStatus.COMPLETED
                 if reminder.get("completed", False)
                 else TodoItemStatus.NEEDS_ACTION
             )
@@ -76,7 +76,7 @@ class ATCTodoListEntity(CoordinatorEntity, TodoListEntity):
             "type": ReminderType.TODO,
             "description": item.description or "",
             "due_date": str(item.due) if item.due else None,
-            "completed": item.status == TodoItemStatus.COMPLETE,
+            "completed": item.status == TodoItemStatus.COMPLETED,
             "notifications": {},
         }
         data.setdefault("reminders", []).append(reminder)
@@ -95,7 +95,7 @@ class ATCTodoListEntity(CoordinatorEntity, TodoListEntity):
                 if item.due is not None:
                     reminder["due_date"] = str(item.due)
                 if item.status is not None:
-                    reminder["completed"] = item.status == TodoItemStatus.COMPLETE
+                    reminder["completed"] = item.status == TodoItemStatus.COMPLETED
                 break
         await self.coordinator.storage.async_save(data)
         await self.coordinator.async_request_refresh()

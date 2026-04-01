@@ -43,6 +43,26 @@ class ATCTimerSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_name = timer.get("name", f"Timer {self._timer_id}")
 
     @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        data = self.coordinator.data or {}
+        for timer in data.get("timers", []):
+            if timer["id"] == self._timer_id:
+                return {
+                    "timer_id": self._timer_id,
+                    "schedule_type": timer.get("schedule_type"),
+                    "time": timer.get("time"),
+                    "datetime": timer.get("datetime"),
+                    "interval": timer.get("interval"),
+                    "interval_unit": timer.get("interval_unit"),
+                    "month": timer.get("month"),
+                    "day": timer.get("day"),
+                    "cron": timer.get("cron"),
+                    "sun_event": timer.get("sun_event"),
+                    "sun_offset_minutes": timer.get("sun_offset_minutes"),
+                }
+        return {"timer_id": self._timer_id}
+
+    @property
     def is_on(self) -> bool:
         data = self.coordinator.data or {}
         for timer in data.get("timers", []):
