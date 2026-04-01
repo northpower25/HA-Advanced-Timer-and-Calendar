@@ -6,6 +6,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
@@ -36,7 +37,11 @@ async def async_setup_entry(
 
     @callback
     def _check_new_entities() -> None:
-        """Add sensor entities for timers/accounts created after initial setup."""
+        """Add sensor entities for timers/accounts created after initial setup.
+
+        Also removes stale sync sensor entities for accounts that have been deleted
+        so the status card no longer shows them.
+        """
         current_data = coordinator.data or {}
         new_entities: list[SensorEntity] = []
         for timer in current_data.get("timers", []):
@@ -45,12 +50,23 @@ async def async_setup_entry(
                 new_entities.append(ATCNextRunSensor(coordinator, entry.entry_id, timer))
                 new_entities.append(ATCLastRunSensor(coordinator, entry.entry_id, timer))
                 new_entities.append(ATCStatusSensor(coordinator, entry.entry_id, timer))
+        current_account_ids = {a["id"] for a in current_data.get("calendar_accounts", [])}
         for account in current_data.get("calendar_accounts", []):
             if account["id"] not in known_account_ids:
                 known_account_ids.add(account["id"])
                 new_entities.append(ATCSyncStatusSensor(coordinator, entry.entry_id, account))
         if new_entities:
             async_add_entities(new_entities)
+        # Remove stale sync sensor entities for deleted accounts
+        removed_account_ids = known_account_ids - current_account_ids
+        if removed_account_ids:
+            entity_reg = er.async_get(hass)
+            for removed_id in removed_account_ids:
+                unique_id = f"{entry.entry_id}_sensor_sync_{removed_id}"
+                entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
+                if entity_id:
+                    entity_reg.async_remove(entity_id)
+            known_account_ids -= removed_account_ids
 
     entry.async_on_unload(coordinator.async_add_listener(_check_new_entities))
 
@@ -145,6 +161,14 @@ class ATCSyncStatusSensor(CoordinatorEntity, SensorEntity):
         self._account_id = account["id"]
         self._attr_unique_id = f"{entry_id}_sensor_sync_{self._account_id}"
         self._attr_name = f"ATC Sync {account.get('name', self._account_id)}"
+
+    @property
+    def available(self) -> bool:
+        data = self.coordinator.data or {}
+        return any(
+            a["id"] == self._account_id
+            for a in data.get("calendar_accounts", [])
+        )
 
     @property
     def native_value(self) -> str:
