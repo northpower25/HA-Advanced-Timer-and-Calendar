@@ -83,10 +83,10 @@ async def _async_register_lovelace_panel(hass: HomeAssistant) -> None:
         async_register_built_in_panel(
             hass,
             "lovelace",
-            _PANEL_TITLE,
-            _PANEL_ICON,
-            _PANEL_URL_PATH,
-            {"mode": "yaml", "filename": str(dashboard_yaml)},
+            sidebar_title=_PANEL_TITLE,
+            sidebar_icon=_PANEL_ICON,
+            frontend_url_path=_PANEL_URL_PATH,
+            config={"mode": "yaml", "filename": str(dashboard_yaml)},
             require_admin=False,
         )
         _LOGGER.info("ATC Lovelace panel registered at /%s", _PANEL_URL_PATH)
