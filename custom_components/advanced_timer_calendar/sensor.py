@@ -129,3 +129,14 @@ class ATCSyncStatusSensor(CoordinatorEntity, SensorEntity):
             if account["id"] == self._account_id:
                 return account.get("sync_status", "idle")
         return "idle"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        data = self.coordinator.data or {}
+        for account in data.get("calendar_accounts", []):
+            if account["id"] == self._account_id:
+                return {
+                    "account_id": self._account_id,
+                    "provider": account.get("provider", ""),
+                }
+        return {"account_id": self._account_id}

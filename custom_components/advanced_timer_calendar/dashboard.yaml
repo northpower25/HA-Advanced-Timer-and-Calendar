@@ -106,8 +106,8 @@ views:
 
           Manage all your timers here: enable/disable, run now or skip the next run.
 
-          > **Tipp:** Neue Timer erstellen Sie über *Entwicklerwerkzeuge → Dienste → `advanced_timer_calendar.create_timer`*.
-          > **Tip:** Create new timers via *Developer Tools → Services → `advanced_timer_calendar.create_timer`*.
+          > **Tipp:** Neuen Timer über den ➕-Button in der Tabelle erstellen. Timer können direkt bearbeitet (✏️) und gelöscht (🗑) werden.
+          > **Tip:** Create a new timer using the ➕ button in the table. Timers can be edited (✏️) and deleted (🗑) directly.
 
       # Timer management card (auto-discovers all ATC switch entities)
       - type: custom:atc-timer-card
@@ -155,7 +155,6 @@ views:
         title: "📅 Bevorstehende Termine / Upcoming Appointments"
         max_items: 15
         show_completed: false
-
       # Anniversaries section
       - type: markdown
         content: |
@@ -304,25 +303,8 @@ views:
           service: advanced_timer_calendar.sync_calendar
           service_data: {}
 
-      - type: entities
-        title: "Kalender-Aktionen / Calendar Actions"
-        entities:
-          - name: "Kalender-Konto hinzufügen / Add Calendar Account"
-            icon: mdi:calendar-plus
-            type: button
-            action_name: Dienst öffnen
-            tap_action:
-              action: call-service
-              service: advanced_timer_calendar.add_calendar_account
-              service_data: {}
-          - name: "Kalender-Konto entfernen / Remove Calendar Account"
-            icon: mdi:calendar-minus
-            type: button
-            action_name: Dienst öffnen
-            tap_action:
-              action: call-service
-              service: advanced_timer_calendar.remove_calendar_account
-              service_data: {}
+      - type: custom:atc-status-card
+        title: "📅 Kalender-Konten / Calendar Accounts"
 
       # ── Timer Actions ─────────────────────────────────────────────────────────
 
