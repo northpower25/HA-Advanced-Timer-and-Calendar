@@ -78,17 +78,51 @@ async def _async_register_lovelace_panel(hass: HomeAssistant) -> None:
             _LOGGER.warning("ATC dashboard.yaml not found at %s – panel will not be registered", dashboard_yaml)
             return
 
-        # Pass the absolute path directly; hass.config.path() with an absolute
-        # path returns the path unchanged (os.path.join behaviour).
+        # Register the sidebar panel entry.  The config dict must only contain
+        # {"mode": "yaml"} – the "filename" key is not part of the panel config
+        # and is ignored by the frontend.
         async_register_built_in_panel(
             hass,
             "lovelace",
             sidebar_title=_PANEL_TITLE,
             sidebar_icon=_PANEL_ICON,
             frontend_url_path=_PANEL_URL_PATH,
-            config={"mode": "yaml", "filename": str(dashboard_yaml)},
+            config={"mode": "yaml"},
             require_admin=False,
         )
+
+        # Also register the YAML dashboard with HA's Lovelace component so that
+        # the WebSocket "lovelace/config" command can find and serve the content.
+        # Without this step the panel is shown but hass.data[LOVELACE_DATA].dashboards
+        # has no entry for _PANEL_URL_PATH and the frontend falls back to an
+        # empty auto-generated view ("Neuer Abschnitt").
+        try:
+            from homeassistant.components.lovelace.const import LOVELACE_DATA
+            from homeassistant.components.lovelace.dashboard import LovelaceYAML
+            from homeassistant.const import CONF_FILENAME
+
+            lovelace = hass.data.get(LOVELACE_DATA)
+            if lovelace is not None:
+                if _PANEL_URL_PATH not in lovelace.dashboards:
+                    lovelace.dashboards[_PANEL_URL_PATH] = LovelaceYAML(
+                        hass,
+                        _PANEL_URL_PATH,
+                        {CONF_FILENAME: str(dashboard_yaml)},
+                    )
+                    _LOGGER.debug("ATC Lovelace YAML dashboard registered for /%s", _PANEL_URL_PATH)
+                else:
+                    _LOGGER.debug(
+                        "ATC Lovelace YAML dashboard already registered for /%s – skipping",
+                        _PANEL_URL_PATH,
+                    )
+            else:
+                _LOGGER.warning(
+                    "Lovelace data not available yet; ATC dashboard content may not "
+                    "load.  Ensure 'lovelace' is listed in the integration dependencies."
+                )
+        except (ImportError, AttributeError) as inner_err:
+            _LOGGER.warning("Could not register Lovelace YAML dashboard: %s", inner_err)
+
         _LOGGER.info("ATC Lovelace panel registered at /%s", _PANEL_URL_PATH)
 
     except (ImportError, ValueError, TypeError) as err:  # noqa: BLE001
