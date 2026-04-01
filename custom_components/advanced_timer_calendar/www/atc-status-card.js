@@ -333,4 +333,6 @@ class AtcStatusCard extends HTMLElement {
   }
 }
 
-customElements.define("atc-status-card", AtcStatusCard);
+if (!customElements.get("atc-status-card")) {
+  customElements.define("atc-status-card", AtcStatusCard);
+}

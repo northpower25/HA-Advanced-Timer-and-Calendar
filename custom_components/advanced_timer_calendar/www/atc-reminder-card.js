@@ -284,4 +284,6 @@ class AtcReminderCard extends HTMLElement {
   }
 }
 
-customElements.define("atc-reminder-card", AtcReminderCard);
+if (!customElements.get("atc-reminder-card")) {
+  customElements.define("atc-reminder-card", AtcReminderCard);
+}

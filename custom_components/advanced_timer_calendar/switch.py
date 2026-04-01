@@ -5,7 +5,7 @@ from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -20,11 +20,26 @@ async def async_setup_entry(
 ) -> None:
     coordinator: ATCDataCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     data = coordinator.data or {}
-    entities = [
-        ATCTimerSwitch(coordinator, entry.entry_id, timer)
-        for timer in data.get("timers", [])
-    ]
+    known_ids: set[str] = set()
+    entities = []
+    for timer in data.get("timers", []):
+        entities.append(ATCTimerSwitch(coordinator, entry.entry_id, timer))
+        known_ids.add(timer["id"])
     async_add_entities(entities)
+
+    @callback
+    def _check_new_timers() -> None:
+        """Add switch entities for timers created after initial setup."""
+        current_data = coordinator.data or {}
+        new_entities = []
+        for timer in current_data.get("timers", []):
+            if timer["id"] not in known_ids:
+                known_ids.add(timer["id"])
+                new_entities.append(ATCTimerSwitch(coordinator, entry.entry_id, timer))
+        if new_entities:
+            async_add_entities(new_entities)
+
+    entry.async_on_unload(coordinator.async_add_listener(_check_new_timers))
 
 
 class ATCTimerSwitch(CoordinatorEntity, SwitchEntity):
@@ -59,6 +74,8 @@ class ATCTimerSwitch(CoordinatorEntity, SwitchEntity):
                     "cron": timer.get("cron"),
                     "sun_event": timer.get("sun_event"),
                     "sun_offset_minutes": timer.get("sun_offset_minutes"),
+                    "actions": timer.get("actions", []),
+                    "conditions": timer.get("conditions", []),
                 }
         return {"timer_id": self._timer_id}
 

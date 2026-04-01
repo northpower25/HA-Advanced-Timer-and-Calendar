@@ -2,6 +2,7 @@
  * ATC Timer Card – Lovelace custom element
  * Displays ATC timers with status, next run countdown, control buttons,
  * and modal forms to create, edit and delete timers from the dashboard.
+ * Includes entity pickers for Actions and Conditions per the ATC concept.
  */
 class AtcTimerCard extends HTMLElement {
   constructor() {
@@ -11,6 +12,9 @@ class AtcTimerCard extends HTMLElement {
     this._updateInterval = null;
     this._modal = null; // null | "create" | "edit"
     this._editTimerData = null;
+    this._actions = [];
+    this._conditions = [];
+    this._condLogic = "and";
   }
 
   setConfig(config) {
@@ -121,50 +125,224 @@ class AtcTimerCard extends HTMLElement {
   _openCreateModal() {
     this._modal = "create";
     this._editTimerData = null;
+    this._actions = [];
+    this._conditions = [];
+    this._condLogic = "and";
     this.render();
   }
 
   _openEditModal(timer) {
     this._modal = "edit";
     this._editTimerData = timer;
+    this._actions = Array.isArray(timer.attrs && timer.attrs.actions) ? JSON.parse(JSON.stringify(timer.attrs.actions)) : [];
+    this._conditions = Array.isArray(timer.attrs && timer.attrs.conditions) ? JSON.parse(JSON.stringify(timer.attrs.conditions)) : [];
+    // Extract logic from first condition if present
+    this._condLogic = (this._conditions.length > 0 && this._conditions[0].logic) ? this._conditions[0].logic : "and";
     this.render();
   }
 
   _closeModal() {
     this._modal = null;
     this._editTimerData = null;
+    this._actions = [];
+    this._conditions = [];
     this.render();
+  }
+
+  // ── Entity datalist helpers ──────────────────────────────────────────────
+
+  _getEntityDatalistOptions() {
+    if (!this._hass) return "";
+    return Object.keys(this._hass.states)
+      .sort()
+      .map((id) => `<option value="${id}"></option>`)
+      .join("");
+  }
+
+  // ── Action row HTML ──────────────────────────────────────────────────────
+
+  _buildActionRowHTML(action, idx) {
+    const entOpts = this._getEntityDatalistOptions();
+    const selectedAction = action.action || "turn_on";
+    return `
+      <div class="action-row" data-idx="${idx}">
+        <datalist id="dl-a${idx}">${entOpts}</datalist>
+        <input type="text" name="action-entity" list="dl-a${idx}"
+          value="${(action.entity_id || "").replace(/"/g, "&quot;")}"
+          placeholder="entity_id (z.B. switch.lamp_1)"/>
+        <div class="row-inline">
+          <select name="action-type">
+            ${["turn_on", "turn_off", "toggle"].map((a) =>
+              `<option value="${a}" ${selectedAction === a ? "selected" : ""}>${a}</option>`
+            ).join("")}
+          </select>
+          <input type="number" name="action-delay" min="0"
+            value="${action.delay_seconds || ""}" placeholder="Delay s" class="narrow-input"/>
+          <input type="number" name="action-duration" min="0"
+            value="${action.duration_seconds || ""}" placeholder="Dauer s" class="narrow-input"/>
+          <button type="button" class="btn btn-rm rm-action" data-idx="${idx}" title="Entfernen / Remove">✕</button>
+        </div>
+      </div>`;
+  }
+
+  // ── Condition row HTML ───────────────────────────────────────────────────
+
+  _buildConditionRowHTML(cond, idx) {
+    const entOpts = this._getEntityDatalistOptions();
+    const isNumeric = cond.type === "numeric_state";
+    return `
+      <div class="condition-row" data-idx="${idx}">
+        <datalist id="dl-c${idx}">${entOpts}</datalist>
+        <input type="text" name="cond-entity" list="dl-c${idx}"
+          value="${(cond.entity_id || "").replace(/"/g, "&quot;")}"
+          placeholder="entity_id (z.B. sensor.rain)"/>
+        <div class="row-inline">
+          <select name="cond-type" data-idx="${idx}">
+            <option value="state" ${!isNumeric ? "selected" : ""}>state</option>
+            <option value="numeric_state" ${isNumeric ? "selected" : ""}>numeric_state</option>
+          </select>
+          <span class="cond-state-grp" style="${isNumeric ? "display:none" : "display:inline-flex"}">
+            <input type="text" name="cond-state"
+              value="${(cond.state || "").replace(/"/g, "&quot;")}"
+              placeholder="Zustand (z.B. on)" class="medium-input"/>
+          </span>
+          <span class="cond-numeric-grp" style="${isNumeric ? "display:inline-flex" : "display:none"};gap:4px">
+            <input type="number" name="cond-above"
+              value="${cond.above != null ? cond.above : ""}" placeholder="über/above" class="narrow-input"/>
+            <input type="number" name="cond-below"
+              value="${cond.below != null ? cond.below : ""}" placeholder="unter/below" class="narrow-input"/>
+          </span>
+          <button type="button" class="btn btn-rm rm-condition" data-idx="${idx}" title="Entfernen / Remove">✕</button>
+        </div>
+      </div>`;
+  }
+
+  // ── DOM rebuild helpers (called without full re-render) ──────────────────
+
+  _rebuildActionsDOM() {
+    const container = this.shadowRoot.getElementById("actions-list");
+    if (!container) return;
+    container.innerHTML = this._actions.map((a, i) => this._buildActionRowHTML(a, i)).join("");
+    this._attachDynamicListeners();
+  }
+
+  _rebuildConditionsDOM() {
+    const container = this.shadowRoot.getElementById("conditions-list");
+    if (!container) return;
+    container.innerHTML = this._conditions.map((c, i) => this._buildConditionRowHTML(c, i)).join("");
+    this._attachDynamicListeners();
+  }
+
+  // ── Read current DOM values into arrays ─────────────────────────────────
+
+  _readActionsFromDOM() {
+    const actions = [];
+    this.shadowRoot.querySelectorAll(".action-row").forEach((row) => {
+      actions.push({
+        entity_id: row.querySelector("[name='action-entity']")?.value?.trim() || "",
+        action: row.querySelector("[name='action-type']")?.value || "turn_on",
+        delay_seconds: parseInt(row.querySelector("[name='action-delay']")?.value || "0", 10) || 0,
+        duration_seconds: parseInt(row.querySelector("[name='action-duration']")?.value || "0", 10) || 0,
+      });
+    });
+    return actions;
+  }
+
+  _readConditionsFromDOM() {
+    const conditions = [];
+    this.shadowRoot.querySelectorAll(".condition-row").forEach((row) => {
+      const type = row.querySelector("[name='cond-type']")?.value || "state";
+      const cond = {
+        entity_id: row.querySelector("[name='cond-entity']")?.value?.trim() || "",
+        type,
+      };
+      if (type === "numeric_state") {
+        const above = row.querySelector("[name='cond-above']")?.value;
+        const below = row.querySelector("[name='cond-below']")?.value;
+        if (above !== "" && above != null) cond.above = parseFloat(above);
+        if (below !== "" && below != null) cond.below = parseFloat(below);
+      } else {
+        cond.state = row.querySelector("[name='cond-state']")?.value?.trim() || "";
+      }
+      conditions.push(cond);
+    });
+    return conditions;
+  }
+
+  // ── Attach listeners for dynamically created rows ────────────────────────
+
+  _attachDynamicListeners() {
+    // Remove-action buttons
+    this.shadowRoot.querySelectorAll(".rm-action").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        this._actions = this._readActionsFromDOM();
+        const idx = parseInt(e.currentTarget.dataset.idx, 10);
+        this._actions.splice(idx, 1);
+        this._rebuildActionsDOM();
+      });
+    });
+    // Remove-condition buttons
+    this.shadowRoot.querySelectorAll(".rm-condition").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        this._conditions = this._readConditionsFromDOM();
+        const idx = parseInt(e.currentTarget.dataset.idx, 10);
+        this._conditions.splice(idx, 1);
+        this._rebuildConditionsDOM();
+      });
+    });
+    // Condition type toggle (state ↔ numeric_state)
+    this.shadowRoot.querySelectorAll("[name='cond-type']").forEach((sel) => {
+      sel.addEventListener("change", (e) => {
+        const row = e.target.closest(".condition-row");
+        if (!row) return;
+        const isNumeric = e.target.value === "numeric_state";
+        const stateGrp = row.querySelector(".cond-state-grp");
+        const numGrp = row.querySelector(".cond-numeric-grp");
+        if (stateGrp) stateGrp.style.display = isNumeric ? "none" : "inline-flex";
+        if (numGrp) numGrp.style.display = isNumeric ? "inline-flex" : "none";
+      });
+    });
   }
 
   async _submitForm() {
     const sr = this.shadowRoot;
-    const name = sr.querySelector('[name="name"]').value.trim();
+    const name = sr.querySelector("[name='name']").value.trim();
     if (!name) { alert("Name ist erforderlich / Name is required"); return; }
 
-    const scheduleType = sr.querySelector('[name="schedule_type"]').value;
-    const enabled = sr.querySelector('[name="enabled"]').checked;
+    const scheduleType = sr.querySelector("[name='schedule_type']").value;
+    const enabled = sr.querySelector("[name='enabled']").checked;
     const data = { name, schedule_type: scheduleType, enabled };
 
-    const timeEl = sr.querySelector('[name="time"]');
+    const timeEl = sr.querySelector("[name='time']");
     if (timeEl && timeEl.value) data.time = timeEl.value;
 
-    const dtEl = sr.querySelector('[name="datetime"]');
+    const dtEl = sr.querySelector("[name='datetime']");
     if (dtEl && dtEl.value) data.datetime = dtEl.value;
 
-    const intervalEl = sr.querySelector('[name="interval"]');
+    const intervalEl = sr.querySelector("[name='interval']");
     if (intervalEl && intervalEl.value) data.interval = parseInt(intervalEl.value, 10);
 
-    const unitEl = sr.querySelector('[name="interval_unit"]');
+    const unitEl = sr.querySelector("[name='interval_unit']");
     if (unitEl && unitEl.value) data.interval_unit = unitEl.value;
 
-    const cronEl = sr.querySelector('[name="cron"]');
+    const cronEl = sr.querySelector("[name='cron']");
     if (cronEl && cronEl.value) data.cron = cronEl.value;
 
-    const sunEl = sr.querySelector('[name="sun_event"]');
+    const sunEl = sr.querySelector("[name='sun_event']");
     if (sunEl && sunEl.value) data.sun_event = sunEl.value;
 
-    const sunOffEl = sr.querySelector('[name="sun_offset_minutes"]');
+    const sunOffEl = sr.querySelector("[name='sun_offset_minutes']");
     if (sunOffEl && sunOffEl.value !== "") data.sun_offset_minutes = parseInt(sunOffEl.value, 10);
+
+    // Collect actions (filter out blank entity_id)
+    data.actions = this._readActionsFromDOM().filter((a) => a.entity_id);
+
+    // Collect conditions with logic
+    const condLogicEl = sr.querySelector("[name='cond-logic']");
+    const condLogic = condLogicEl ? condLogicEl.value : "and";
+    data.conditions = this._readConditionsFromDOM()
+      .filter((c) => c.entity_id)
+      .map((c) => ({ ...c, logic: condLogic }));
 
     if (this._modal === "edit" && this._editTimerData) {
       data.timer_id = this._editTimerData.timerId;
@@ -227,6 +405,11 @@ class AtcTimerCard extends HTMLElement {
         }).join("");
 
     const schedType = (t && t.attrs && t.attrs.schedule_type) || "daily";
+    const condLogicVal = this._condLogic || "and";
+
+    // Pre-render actions and conditions HTML
+    const actionsHTML = this._actions.map((a, i) => this._buildActionRowHTML(a, i)).join("");
+    const conditionsHTML = this._conditions.map((c, i) => this._buildConditionRowHTML(c, i)).join("");
 
     const modalHtml = this._modal ? `
       <div class="modal-overlay" id="modal-overlay">
@@ -252,7 +435,7 @@ class AtcTimerCard extends HTMLElement {
               <input type="text" name="time" value="${(t && t.attrs && t.attrs.time) || ""}" placeholder="08:00"/>
             </div>
             <div class="form-row" id="grp-datetime">
-              <label>Datum & Zeit / Date &amp; Time</label>
+              <label>Datum &amp; Zeit / Date &amp; Time</label>
               <input type="datetime-local" name="datetime" value="${(t && t.attrs && t.attrs.datetime) ? t.attrs.datetime.slice(0,16) : ""}"/>
             </div>
             <div class="form-row" id="grp-interval">
@@ -285,6 +468,32 @@ class AtcTimerCard extends HTMLElement {
                 <input type="checkbox" name="enabled" ${(!isEdit || (t && t.enabled)) ? "checked" : ""}/>
                 Aktiviert / Enabled
               </label>
+            </div>
+
+            <!-- Actions Section -->
+            <div class="form-section">
+              <div class="section-hdr">
+                <label>⚡ Aktionen / Actions</label>
+                <button type="button" class="btn add-item" id="add-action-btn">+ Aktion / Action</button>
+              </div>
+              <div class="section-hint">Welche Entitäten sollen beim Timer-Auslösen geschaltet werden? / Which entities should be switched when the timer fires?</div>
+              <div id="actions-list">${actionsHTML}</div>
+            </div>
+
+            <!-- Conditions Section -->
+            <div class="form-section">
+              <div class="section-hdr">
+                <label>🔀 Bedingungen / Conditions</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <select name="cond-logic" style="padding:4px 6px;border:1px solid var(--divider-color,#444);border-radius:4px;background:var(--secondary-background-color,#2a2a2a);color:var(--primary-text-color);font-size:0.85em">
+                    <option value="and" ${condLogicVal === "and" ? "selected" : ""}>AND (alle)</option>
+                    <option value="or" ${condLogicVal === "or" ? "selected" : ""}>OR (eine)</option>
+                  </select>
+                  <button type="button" class="btn add-item" id="add-cond-btn">+ Bedingung</button>
+                </div>
+              </div>
+              <div class="section-hint">Timer nur ausführen wenn diese Bedingungen erfüllt sind. / Only fire when these conditions are met.</div>
+              <div id="conditions-list">${conditionsHTML}</div>
             </div>
           </div>
           <div class="modal-footer">
@@ -322,6 +531,8 @@ class AtcTimerCard extends HTMLElement {
         .btn.create { background: #4CAF50; padding: 6px 14px; font-size: 0.9em; }
         .btn.cancel { background: #9e9e9e; }
         .btn.submit { background: var(--primary-color, #03a9f4); }
+        .btn.add-item { background: #4CAF50; padding: 3px 8px; font-size: 0.8em; margin-left: 0; }
+        .btn.btn-rm { background: #f44336; padding: 2px 6px; font-size: 0.8em; }
         .toggle { position: relative; display: inline-block; width: 34px; height: 20px; }
         .toggle input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
@@ -334,7 +545,7 @@ class AtcTimerCard extends HTMLElement {
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 9999;
           display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; }
         .modal { background: var(--card-background-color, #1c1c1c); border-radius: 12px;
-          min-width: 300px; max-width: 460px; width: 100%; max-height: 90vh; overflow-y: auto;
+          min-width: 300px; max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto;
           box-shadow: 0 8px 32px rgba(0,0,0,.4); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid var(--divider-color, #333); }
         .modal-header h3 { margin: 0; font-size: 1em; color: var(--primary-text-color); }
@@ -349,6 +560,26 @@ class AtcTimerCard extends HTMLElement {
           color: var(--primary-text-color); font-size: 0.9em; box-sizing: border-box; width: 100%; }
         .check-label { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9em !important; color: var(--primary-text-color) !important; }
         .check-label input { width: auto; }
+        /* Actions & Conditions */
+        .form-section { border-top: 1px solid var(--divider-color, #444); padding-top: 10px; margin-top: 4px; }
+        .section-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .section-hdr label { font-size: 0.85em; font-weight: 600; color: var(--secondary-text-color); }
+        .section-hint { font-size: 0.78em; color: var(--secondary-text-color); margin-bottom: 8px; }
+        .action-row, .condition-row { background: var(--secondary-background-color, #2a2a2a);
+          border-radius: 6px; padding: 8px; margin-bottom: 6px; display: flex; flex-direction: column; gap: 6px; }
+        .action-row input[type="text"], .action-row input[type="number"],
+        .condition-row input[type="text"], .condition-row input[type="number"] {
+          padding: 5px 8px; border: 1px solid var(--divider-color, #555);
+          border-radius: 4px; background: var(--card-background-color, #1c1c1c);
+          color: var(--primary-text-color); font-size: 0.85em; }
+        .action-row select, .condition-row select {
+          padding: 5px 8px; border: 1px solid var(--divider-color, #555);
+          border-radius: 4px; background: var(--card-background-color, #1c1c1c);
+          color: var(--primary-text-color); font-size: 0.85em; }
+        .row-inline { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+        .narrow-input { width: 70px !important; }
+        .medium-input { width: 110px !important; }
+        .cond-state-grp, .cond-numeric-grp { display: inline-flex; gap: 4px; align-items: center; }
       </style>
       <div class="card">
         <div class="card-header">
@@ -409,6 +640,26 @@ class AtcTimerCard extends HTMLElement {
         this._updateScheduleGroups(schedSel.value);
         schedSel.addEventListener("change", (e) => this._updateScheduleGroups(e.target.value));
       }
+
+      // Add action/condition buttons
+      const addActionBtn = this.shadowRoot.getElementById("add-action-btn");
+      if (addActionBtn) addActionBtn.addEventListener("click", () => {
+        this._actions = this._readActionsFromDOM();
+        this._conditions = this._readConditionsFromDOM();
+        this._actions.push({ entity_id: "", action: "turn_on", delay_seconds: 0, duration_seconds: 0 });
+        this._rebuildActionsDOM();
+      });
+
+      const addCondBtn = this.shadowRoot.getElementById("add-cond-btn");
+      if (addCondBtn) addCondBtn.addEventListener("click", () => {
+        this._actions = this._readActionsFromDOM();
+        this._conditions = this._readConditionsFromDOM();
+        this._conditions.push({ entity_id: "", type: "state", state: "" });
+        this._rebuildConditionsDOM();
+      });
+
+      // Attach listeners for pre-rendered action/condition rows
+      this._attachDynamicListeners();
     }
   }
 
@@ -417,4 +668,6 @@ class AtcTimerCard extends HTMLElement {
   }
 }
 
-customElements.define("atc-timer-card", AtcTimerCard);
+if (!customElements.get("atc-timer-card")) {
+  customElements.define("atc-timer-card", AtcTimerCard);
+}

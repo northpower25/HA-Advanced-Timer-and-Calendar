@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN, PLATFORMS
 from .coordinator import ATCDataCoordinator
@@ -52,11 +53,20 @@ async def _async_register_frontend_cards(hass: HomeAssistant) -> None:
             )
         ])
 
-        for card_file in _CARD_FILES:
-            if (card_dir / card_file).exists():
-                card_url = f"/{DOMAIN}_local/{card_file}?v={_CARD_VERSION}"
-                hass.data.setdefault("frontend_extra_module_url", set()).add(card_url)
-                _LOGGER.debug("ATC card registered: %s", card_url)
+        try:
+            from homeassistant.components.frontend import add_extra_js_url
+            for card_file in _CARD_FILES:
+                if (card_dir / card_file).exists():
+                    card_url = f"/{DOMAIN}_local/{card_file}?v={_CARD_VERSION}"
+                    add_extra_js_url(hass, card_url)
+                    _LOGGER.debug("ATC card registered: %s", card_url)
+        except ImportError:
+            # Fallback for older HA versions
+            for card_file in _CARD_FILES:
+                if (card_dir / card_file).exists():
+                    card_url = f"/{DOMAIN}_local/{card_file}?v={_CARD_VERSION}"
+                    hass.data.setdefault("frontend_extra_module_url", set()).add(card_url)
+                    _LOGGER.debug("ATC card registered (fallback): %s", card_url)
 
         _LOGGER.info("ATC frontend cards registered from %s", card_dir)
 
@@ -91,42 +101,52 @@ async def _async_register_lovelace_panel(hass: HomeAssistant) -> None:
             require_admin=False,
         )
 
-        # Also register the YAML dashboard with HA's Lovelace component so that
-        # the WebSocket "lovelace/config" command can find and serve the content.
-        # Without this step the panel is shown but hass.data[LOVELACE_DATA].dashboards
-        # has no entry for _PANEL_URL_PATH and the frontend falls back to an
-        # empty auto-generated view ("Neuer Abschnitt").
-        try:
-            from homeassistant.components.lovelace.const import LOVELACE_DATA
-            from homeassistant.components.lovelace.dashboard import LovelaceYAML
-            from homeassistant.const import CONF_FILENAME
+        # Register the YAML dashboard with HA's Lovelace component.
+        # This is done here and also deferred to EVENT_HOMEASSISTANT_STARTED
+        # to handle cases where the lovelace component initialises after us.
+        _register_lovelace_yaml(hass, dashboard_yaml)
 
-            lovelace = hass.data.get(LOVELACE_DATA)
-            if lovelace is not None:
-                if _PANEL_URL_PATH not in lovelace.dashboards:
-                    lovelace.dashboards[_PANEL_URL_PATH] = LovelaceYAML(
-                        hass,
-                        _PANEL_URL_PATH,
-                        {CONF_FILENAME: str(dashboard_yaml)},
-                    )
-                    _LOGGER.debug("ATC Lovelace YAML dashboard registered for /%s", _PANEL_URL_PATH)
-                else:
-                    _LOGGER.debug(
-                        "ATC Lovelace YAML dashboard already registered for /%s – skipping",
-                        _PANEL_URL_PATH,
-                    )
-            else:
-                _LOGGER.warning(
-                    "Lovelace data not available yet; ATC dashboard content may not "
-                    "load.  Ensure 'lovelace' is listed in the integration dependencies."
-                )
-        except (ImportError, AttributeError) as inner_err:
-            _LOGGER.warning("Could not register Lovelace YAML dashboard: %s", inner_err)
+        @callback
+        def _on_ha_started(_event: Any) -> None:
+            """Re-register the Lovelace YAML dashboard after HA has started."""
+            _register_lovelace_yaml(hass, dashboard_yaml)
+
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_ha_started)
 
         _LOGGER.info("ATC Lovelace panel registered at /%s", _PANEL_URL_PATH)
 
     except (ImportError, ValueError, TypeError) as err:  # noqa: BLE001
         _LOGGER.error("Failed to register ATC Lovelace panel: %s", err, exc_info=True)
+
+
+def _register_lovelace_yaml(hass: HomeAssistant, dashboard_yaml: Path) -> None:
+    """Register (or re-register) the LovelaceYAML dashboard entry."""
+    try:
+        from homeassistant.components.lovelace.const import LOVELACE_DATA
+        from homeassistant.components.lovelace.dashboard import LovelaceYAML
+        from homeassistant.const import CONF_FILENAME
+
+        lovelace = hass.data.get(LOVELACE_DATA)
+        if lovelace is not None:
+            if _PANEL_URL_PATH not in lovelace.dashboards:
+                lovelace.dashboards[_PANEL_URL_PATH] = LovelaceYAML(
+                    hass,
+                    _PANEL_URL_PATH,
+                    {CONF_FILENAME: str(dashboard_yaml)},
+                )
+                _LOGGER.debug("ATC Lovelace YAML dashboard registered for /%s", _PANEL_URL_PATH)
+            else:
+                _LOGGER.debug(
+                    "ATC Lovelace YAML dashboard already registered for /%s – skipping",
+                    _PANEL_URL_PATH,
+                )
+        else:
+            _LOGGER.warning(
+                "Lovelace data not available; ATC dashboard content may not "
+                "load.  Ensure 'lovelace' is listed in the integration dependencies."
+            )
+    except (ImportError, AttributeError) as inner_err:
+        _LOGGER.warning("Could not register Lovelace YAML dashboard: %s", inner_err)
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
