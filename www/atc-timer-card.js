@@ -134,8 +134,8 @@ class AtcTimerCard extends HTMLElement {
   _openEditModal(timer) {
     this._modal = "edit";
     this._editTimerData = timer;
-    this._actions = Array.isArray(timer.attrs && timer.attrs.actions) ? JSON.parse(JSON.stringify(timer.attrs.actions)) : [];
-    this._conditions = Array.isArray(timer.attrs && timer.attrs.conditions) ? JSON.parse(JSON.stringify(timer.attrs.conditions)) : [];
+    this._actions = Array.isArray(timer.attrs?.actions) ? JSON.parse(JSON.stringify(timer.attrs.actions)) : [];
+    this._conditions = Array.isArray(timer.attrs?.conditions) ? JSON.parse(JSON.stringify(timer.attrs.conditions)) : [];
     // Extract logic from first condition if present
     this._condLogic = (this._conditions.length > 0 && this._conditions[0].logic) ? this._conditions[0].logic : "and";
     this.render();
@@ -259,8 +259,10 @@ class AtcTimerCard extends HTMLElement {
       if (type === "numeric_state") {
         const above = row.querySelector("[name='cond-above']")?.value;
         const below = row.querySelector("[name='cond-below']")?.value;
-        if (above !== "" && above != null) cond.above = parseFloat(above);
-        if (below !== "" && below != null) cond.below = parseFloat(below);
+        const aboveNum = parseFloat(above);
+        const belowNum = parseFloat(below);
+        if (!isNaN(aboveNum)) cond.above = aboveNum;
+        if (!isNaN(belowNum)) cond.below = belowNum;
       } else {
         cond.state = row.querySelector("[name='cond-state']")?.value?.trim() || "";
       }
