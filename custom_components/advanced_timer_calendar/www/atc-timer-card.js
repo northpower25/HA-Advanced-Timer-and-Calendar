@@ -21,7 +21,9 @@ class AtcTimerCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     this._updateTimers();
-    this.render();
+    if (!this._modal) {
+      this.render();
+    }
   }
 
   connectedCallback() {
