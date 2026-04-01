@@ -66,7 +66,7 @@ async def async_setup_entry(
                 entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
                 if entity_id:
                     entity_reg.async_remove(entity_id)
-            known_account_ids -= removed_account_ids
+            known_account_ids.difference_update(removed_account_ids)
 
     entry.async_on_unload(coordinator.async_add_listener(_check_new_entities))
 
