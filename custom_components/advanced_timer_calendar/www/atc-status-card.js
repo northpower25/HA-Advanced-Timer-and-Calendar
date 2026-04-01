@@ -17,7 +17,9 @@ class AtcStatusCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    this.render();
+    if (!this._showAddModal) {
+      this.render();
+    }
   }
 
   _gatherStats() {
