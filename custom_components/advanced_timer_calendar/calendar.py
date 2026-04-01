@@ -77,13 +77,16 @@ class ATCAppointmentsCalendar(_ATCBaseCalendar):
                 start = dt_util.parse_datetime(dt_str)
                 if start is None:
                     start = dt_util.as_local(datetime.fromisoformat(dt_str))
-                if start and start_date <= start <= end_date:
-                    events.append(CalendarEvent(
-                        start=start,
-                        end=start,
-                        summary=reminder.get("name", "Appointment"),
-                        description=reminder.get("description", ""),
-                    ))
+                if start is not None:
+                    if start.tzinfo is None:
+                        start = dt_util.as_local(start)
+                    if start_date <= start <= end_date:
+                        events.append(CalendarEvent(
+                            start=start,
+                            end=start,
+                            summary=reminder.get("name", "Appointment"),
+                            description=reminder.get("description", ""),
+                        ))
             except (ValueError, TypeError):
                 pass
         return events
@@ -112,6 +115,8 @@ class ATCAnniversariesCalendar(_ATCBaseCalendar):
                     base = dt_util.as_local(datetime.fromisoformat(dt_str))
                 if base is None:
                     continue
+                if base.tzinfo is None:
+                    base = dt_util.as_local(base)
                 for year_offset in range(-1, 3):
                     try:
                         candidate = base.replace(year=base.year + year_offset)
@@ -150,13 +155,16 @@ class ATCTodosCalendar(_ATCBaseCalendar):
                 due = dt_util.parse_datetime(dt_str)
                 if due is None:
                     due = dt_util.as_local(datetime.fromisoformat(dt_str))
-                if due and start_date <= due <= end_date:
-                    events.append(CalendarEvent(
-                        start=due,
-                        end=due,
-                        summary=reminder.get("name", "Todo"),
-                        description=reminder.get("description", ""),
-                    ))
+                if due is not None:
+                    if due.tzinfo is None:
+                        due = dt_util.as_local(due)
+                    if start_date <= due <= end_date:
+                        events.append(CalendarEvent(
+                            start=due,
+                            end=due,
+                            summary=reminder.get("name", "Todo"),
+                            description=reminder.get("description", ""),
+                        ))
             except (ValueError, TypeError):
                 pass
         return events
@@ -181,13 +189,16 @@ class ATCTimerScheduleCalendar(_ATCBaseCalendar):
                 continue
             try:
                 next_run = dt_util.parse_datetime(next_run_str)
-                if next_run and start_date <= next_run <= end_date:
-                    events.append(CalendarEvent(
-                        start=next_run,
-                        end=next_run,
-                        summary=f"\u23f0 {timer.get('name', 'Timer')}",
-                        description=f"Scheduled timer run for {timer.get('name', 'Timer')}",
-                    ))
+                if next_run is not None:
+                    if next_run.tzinfo is None:
+                        next_run = dt_util.as_local(next_run)
+                    if start_date <= next_run <= end_date:
+                        events.append(CalendarEvent(
+                            start=next_run,
+                            end=next_run,
+                            summary=f"\u23f0 {timer.get('name', 'Timer')}",
+                            description=f"Scheduled timer run for {timer.get('name', 'Timer')}",
+                        ))
             except (ValueError, TypeError):
                 pass
         return events

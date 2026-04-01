@@ -5,7 +5,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
@@ -21,14 +21,38 @@ async def async_setup_entry(
 ) -> None:
     coordinator: ATCDataCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     data = coordinator.data or {}
+    known_timer_ids: set[str] = set()
+    known_account_ids: set[str] = set()
     entities: list[SensorEntity] = []
     for timer in data.get("timers", []):
         entities.append(ATCNextRunSensor(coordinator, entry.entry_id, timer))
         entities.append(ATCLastRunSensor(coordinator, entry.entry_id, timer))
         entities.append(ATCStatusSensor(coordinator, entry.entry_id, timer))
+        known_timer_ids.add(timer["id"])
     for account in data.get("calendar_accounts", []):
         entities.append(ATCSyncStatusSensor(coordinator, entry.entry_id, account))
+        known_account_ids.add(account["id"])
     async_add_entities(entities)
+
+    @callback
+    def _check_new_entities() -> None:
+        """Add sensor entities for timers/accounts created after initial setup."""
+        current_data = coordinator.data or {}
+        new_entities: list[SensorEntity] = []
+        for timer in current_data.get("timers", []):
+            if timer["id"] not in known_timer_ids:
+                known_timer_ids.add(timer["id"])
+                new_entities.append(ATCNextRunSensor(coordinator, entry.entry_id, timer))
+                new_entities.append(ATCLastRunSensor(coordinator, entry.entry_id, timer))
+                new_entities.append(ATCStatusSensor(coordinator, entry.entry_id, timer))
+        for account in current_data.get("calendar_accounts", []):
+            if account["id"] not in known_account_ids:
+                known_account_ids.add(account["id"])
+                new_entities.append(ATCSyncStatusSensor(coordinator, entry.entry_id, account))
+        if new_entities:
+            async_add_entities(new_entities)
+
+    entry.async_on_unload(coordinator.async_add_listener(_check_new_entities))
 
 
 class ATCNextRunSensor(CoordinatorEntity, SensorEntity):
