@@ -20,7 +20,9 @@ class AtcReminderCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    this.render();
+    if (!this._showCreateModal) {
+      this.render();
+    }
   }
 
   _typeColor(type) {

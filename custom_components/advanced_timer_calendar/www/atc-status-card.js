@@ -42,7 +42,7 @@ class AtcStatusCard extends HTMLElement {
           errors.push(state.attributes.friendly_name || entityId);
         }
       }
-      if (entityId.includes("atc") && entityId.includes("sync")) {
+      if (entityId.includes("atc") && entityId.includes("sync") && state.state !== "unavailable") {
         syncStatuses.push({
           name: state.attributes.friendly_name || entityId,
           status: state.state,

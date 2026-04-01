@@ -31,7 +31,7 @@ class AtcTimerCard extends HTMLElement {
   }
 
   connectedCallback() {
-    this._updateInterval = setInterval(() => this.render(), 30000);
+    this._updateInterval = setInterval(() => { if (!this._modal) this.render(); }, 30000);
   }
 
   disconnectedCallback() {
