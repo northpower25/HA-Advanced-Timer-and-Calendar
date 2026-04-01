@@ -8,10 +8,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, callback
 
-from .const import DOMAIN, PLATFORMS
+from .const import DOMAIN, PLATFORMS, SyncDirection, ConflictStrategy
 from .coordinator import ATCDataCoordinator
 from .scheduler import ATCScheduler
 from .services import async_register_services
+from .storage import ATCStorage
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -157,9 +158,93 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     return True
 
 
+async def _async_provision_calendar_account(
+    coordinator: ATCDataCoordinator,
+    entry: ConfigEntry,
+) -> None:
+    """Create or update a calendar_accounts storage record from config-entry credentials.
+
+    When a user configures a Microsoft or Google calendar in the Setup/Options
+    flow, the credentials land in ``entry.data`` / ``entry.options``.  They are
+    NOT automatically mirrored into the ``calendar_accounts`` storage list that
+    the sync engine, sensor platform, and dashboard card all read from.  This
+    function bridges that gap: it creates the account record on first run and
+    keeps the credentials in sync whenever the options flow saves new values.
+    """
+    # Effective config: options override data (same behaviour as HA convention)
+    cfg: dict[str, Any] = {**entry.data, **(entry.options or {})}
+    provider: str = cfg.get("calendar_sync_provider", "none")
+    if provider not in ("microsoft", "google"):
+        return
+
+    if provider == "microsoft":
+        client_id = cfg.get("ms_client_id", "")
+        client_secret = cfg.get("ms_client_secret", "")
+        tenant_id = cfg.get("ms_tenant_id", "common")  # "common" works for both personal and multi-tenant apps
+        display_name = "Microsoft 365"
+        extra: dict[str, Any] = {"tenant_id": tenant_id}
+    else:  # google
+        client_id = cfg.get("google_client_id", "")
+        client_secret = cfg.get("google_client_secret", "")
+        display_name = "Google Calendar"
+        extra = {}
+
+    if not client_id or not client_secret:
+        _LOGGER.warning(
+            "ATC: calendar provider '%s' is configured but credentials are incomplete "
+            "(client_id or client_secret missing) – skipping account provisioning.",
+            provider,
+        )
+        return
+
+    data = await coordinator.storage.async_load()
+    accounts: list[dict[str, Any]] = data.setdefault("calendar_accounts", [])
+
+    # Look for an existing account that was provisioned from the same provider
+    # and client_id so we can update credentials instead of creating duplicates.
+    existing = next(
+        (a for a in accounts if a.get("provider") == provider and a.get("client_id") == client_id),
+        None,
+    )
+    if existing is not None:
+        # Update mutable credential fields in case the user changed them via options flow.
+        # The display name is intentionally left unchanged so users can rename the account
+        # via the dashboard without having it overwritten on every HA restart.
+        existing["client_secret"] = client_secret
+        existing.update(extra)
+    else:
+        account: dict[str, Any] = {
+            "id": ATCStorage.new_id(),
+            "name": display_name,
+            "provider": provider,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "sync_direction": SyncDirection.BIDIRECTIONAL,
+            "conflict_strategy": ConflictStrategy.NEWEST_WINS,
+            "calendars": [],
+            "sync_status": "idle",
+            "last_sync": None,
+            "access_token": None,
+            "refresh_token": None,
+            "token_expiry": None,
+        }
+        account.update(extra)
+        accounts.append(account)
+        _LOGGER.info(
+            "ATC: created calendar account '%s' (%s) from config-entry credentials",
+            display_name,
+            provider,
+        )
+
+    await coordinator.storage.async_save(data)
+    await coordinator.async_request_refresh()
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = ATCDataCoordinator(hass, entry.entry_id)
     await coordinator.async_config_entry_first_refresh()
+
+    await _async_provision_calendar_account(coordinator, entry)
 
     scheduler = ATCScheduler(hass, coordinator)
     await scheduler.async_start()
@@ -177,6 +262,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    domain_data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+    coordinator: ATCDataCoordinator | None = domain_data.get("coordinator")
+    if coordinator is not None:
+        await _async_provision_calendar_account(coordinator, entry)
     await hass.config_entries.async_reload(entry.entry_id)
 
 
